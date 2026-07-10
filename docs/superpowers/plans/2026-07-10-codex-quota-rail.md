@@ -258,7 +258,7 @@ dotnet add tests/CodexQuotaRail.Windows.Tests/CodexQuotaRail.Windows.Tests.cspro
 dotnet add tests/CodexQuotaRail.App.Tests/CodexQuotaRail.App.Tests.csproj reference src/CodexQuotaRail.App/CodexQuotaRail.App.csproj
 ~~~
 
-Set TargetFramework to net8.0-windows10.0.19041.0 in App and Windows projects. Set UseWPF and UseWindowsForms to true only in App.
+Set TargetFramework to net8.0-windows10.0.19041.0 in App, Windows, Windows.Tests, and App.Tests projects so the Windows test projects can reference their production targets. Keep Core.Tests and AppServer.Tests on net8.0. Set UseWPF and UseWindowsForms to true only in App.
 
 - [ ] **Step 5: Prove the empty solution is healthy**
 

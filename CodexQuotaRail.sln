@@ -1,0 +1,87 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.0.31903.59
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "src", "src", "{34A1ED47-3972-4B46-A723-F6AB9C52412F}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CodexQuotaRail.Core", "src\CodexQuotaRail.Core\CodexQuotaRail.Core.csproj", "{815F8143-3F33-4FB3-A106-207660396986}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CodexQuotaRail.AppServer", "src\CodexQuotaRail.AppServer\CodexQuotaRail.AppServer.csproj", "{0D7E1876-9510-40E3-9AC5-7A6150D9B601}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CodexQuotaRail.Windows", "src\CodexQuotaRail.Windows\CodexQuotaRail.Windows.csproj", "{8E037307-1F87-4706-9FE5-53AF2BA1D2D9}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CodexQuotaRail.App", "src\CodexQuotaRail.App\CodexQuotaRail.App.csproj", "{AF4477B3-A826-481E-9C95-6B0C6151EE5E}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "tests", "tests", "{FD308427-DC1F-45FC-9C93-503F3EFC9D7F}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CodexQuotaRail.Core.Tests", "tests\CodexQuotaRail.Core.Tests\CodexQuotaRail.Core.Tests.csproj", "{FDCAE9DD-2E2F-4AA0-B17A-53790E55864B}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CodexQuotaRail.AppServer.Tests", "tests\CodexQuotaRail.AppServer.Tests\CodexQuotaRail.AppServer.Tests.csproj", "{D4AED897-95C0-4113-9703-B7F4AD261528}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CodexQuotaRail.Windows.Tests", "tests\CodexQuotaRail.Windows.Tests\CodexQuotaRail.Windows.Tests.csproj", "{0E1FC7CC-94EB-4796-8A1E-E7DF92261759}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CodexQuotaRail.App.Tests", "tests\CodexQuotaRail.App.Tests\CodexQuotaRail.App.Tests.csproj", "{4B1F142B-3E03-47A3-9155-DA1CE0A9AC16}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "tools", "tools", "{13E691BD-B996-4547-B799-D0137853BD2C}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "FakeCodexAppServer", "tools\FakeCodexAppServer\FakeCodexAppServer.csproj", "{E987117E-E9B9-474B-BD9C-4F21D617DBFB}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{815F8143-3F33-4FB3-A106-207660396986}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{815F8143-3F33-4FB3-A106-207660396986}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{815F8143-3F33-4FB3-A106-207660396986}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{815F8143-3F33-4FB3-A106-207660396986}.Release|Any CPU.Build.0 = Release|Any CPU
+		{0D7E1876-9510-40E3-9AC5-7A6150D9B601}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{0D7E1876-9510-40E3-9AC5-7A6150D9B601}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{0D7E1876-9510-40E3-9AC5-7A6150D9B601}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{0D7E1876-9510-40E3-9AC5-7A6150D9B601}.Release|Any CPU.Build.0 = Release|Any CPU
+		{8E037307-1F87-4706-9FE5-53AF2BA1D2D9}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{8E037307-1F87-4706-9FE5-53AF2BA1D2D9}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{8E037307-1F87-4706-9FE5-53AF2BA1D2D9}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{8E037307-1F87-4706-9FE5-53AF2BA1D2D9}.Release|Any CPU.Build.0 = Release|Any CPU
+		{AF4477B3-A826-481E-9C95-6B0C6151EE5E}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{AF4477B3-A826-481E-9C95-6B0C6151EE5E}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{AF4477B3-A826-481E-9C95-6B0C6151EE5E}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{AF4477B3-A826-481E-9C95-6B0C6151EE5E}.Release|Any CPU.Build.0 = Release|Any CPU
+		{FDCAE9DD-2E2F-4AA0-B17A-53790E55864B}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{FDCAE9DD-2E2F-4AA0-B17A-53790E55864B}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{FDCAE9DD-2E2F-4AA0-B17A-53790E55864B}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{FDCAE9DD-2E2F-4AA0-B17A-53790E55864B}.Release|Any CPU.Build.0 = Release|Any CPU
+		{D4AED897-95C0-4113-9703-B7F4AD261528}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{D4AED897-95C0-4113-9703-B7F4AD261528}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{D4AED897-95C0-4113-9703-B7F4AD261528}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{D4AED897-95C0-4113-9703-B7F4AD261528}.Release|Any CPU.Build.0 = Release|Any CPU
+		{0E1FC7CC-94EB-4796-8A1E-E7DF92261759}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{0E1FC7CC-94EB-4796-8A1E-E7DF92261759}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{0E1FC7CC-94EB-4796-8A1E-E7DF92261759}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{0E1FC7CC-94EB-4796-8A1E-E7DF92261759}.Release|Any CPU.Build.0 = Release|Any CPU
+		{4B1F142B-3E03-47A3-9155-DA1CE0A9AC16}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{4B1F142B-3E03-47A3-9155-DA1CE0A9AC16}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{4B1F142B-3E03-47A3-9155-DA1CE0A9AC16}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{4B1F142B-3E03-47A3-9155-DA1CE0A9AC16}.Release|Any CPU.Build.0 = Release|Any CPU
+		{E987117E-E9B9-474B-BD9C-4F21D617DBFB}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{E987117E-E9B9-474B-BD9C-4F21D617DBFB}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{E987117E-E9B9-474B-BD9C-4F21D617DBFB}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{E987117E-E9B9-474B-BD9C-4F21D617DBFB}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(NestedProjects) = preSolution
+		{815F8143-3F33-4FB3-A106-207660396986} = {34A1ED47-3972-4B46-A723-F6AB9C52412F}
+		{0D7E1876-9510-40E3-9AC5-7A6150D9B601} = {34A1ED47-3972-4B46-A723-F6AB9C52412F}
+		{8E037307-1F87-4706-9FE5-53AF2BA1D2D9} = {34A1ED47-3972-4B46-A723-F6AB9C52412F}
+		{AF4477B3-A826-481E-9C95-6B0C6151EE5E} = {34A1ED47-3972-4B46-A723-F6AB9C52412F}
+		{FDCAE9DD-2E2F-4AA0-B17A-53790E55864B} = {FD308427-DC1F-45FC-9C93-503F3EFC9D7F}
+		{D4AED897-95C0-4113-9703-B7F4AD261528} = {FD308427-DC1F-45FC-9C93-503F3EFC9D7F}
+		{0E1FC7CC-94EB-4796-8A1E-E7DF92261759} = {FD308427-DC1F-45FC-9C93-503F3EFC9D7F}
+		{4B1F142B-3E03-47A3-9155-DA1CE0A9AC16} = {FD308427-DC1F-45FC-9C93-503F3EFC9D7F}
+		{E987117E-E9B9-474B-BD9C-4F21D617DBFB} = {13E691BD-B996-4547-B799-D0137853BD2C}
+	EndGlobalSection
+EndGlobal
