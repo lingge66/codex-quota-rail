@@ -1,26 +1,48 @@
-using System.Collections.Concurrent;
 using System.Diagnostics;
 
 namespace CodexQuotaRail.AppServer.Discovery;
 
 public sealed class SystemCodexDiscoveryProbe : ICodexDiscoveryProbe
 {
-    private readonly ConcurrentDictionary<string, bool> _executableCache =
-        new(StringComparer.OrdinalIgnoreCase);
-    private readonly Lazy<IReadOnlyList<CodexPackageRegistration>> _registeredPackages;
+    private static readonly TimeSpan DefaultPackageTtl = TimeSpan.FromSeconds(5);
+    private readonly TimeSpan _packageTtl;
+    private readonly ICodexPackageRegistrationSource _packageRegistrationSource;
+    private readonly object _packageSync = new();
+    private readonly TimeProvider _timeProvider;
+    private readonly IBoundedProcessRunner _runner;
+    private DateTimeOffset _packageExpiresAt = DateTimeOffset.MinValue;
+    private IReadOnlyList<CodexPackageRegistration> _registeredPackages = [];
 
     public SystemCodexDiscoveryProbe(
-        ICodexPackageRegistrationSource? packageRegistrationSource = null)
+        ICodexPackageRegistrationSource? packageRegistrationSource = null,
+        TimeProvider? timeProvider = null,
+        TimeSpan? packageTtl = null)
+        : this(
+            packageRegistrationSource,
+            timeProvider,
+            packageTtl,
+            new BoundedProcessRunner())
     {
-        var source = packageRegistrationSource ??
+    }
+
+    internal SystemCodexDiscoveryProbe(
+        ICodexPackageRegistrationSource? packageRegistrationSource,
+        TimeProvider? timeProvider,
+        TimeSpan? packageTtl,
+        IBoundedProcessRunner runner)
+    {
+        ArgumentNullException.ThrowIfNull(runner);
+        _packageRegistrationSource = packageRegistrationSource ??
             new PowerShellCodexPackageRegistrationSource();
-        _registeredPackages = new Lazy<IReadOnlyList<CodexPackageRegistration>>(
-            source.GetRegistrations,
-            LazyThreadSafetyMode.ExecutionAndPublication);
+        _timeProvider = timeProvider ?? TimeProvider.System;
+        _runner = runner;
+        _packageTtl = packageTtl ?? DefaultPackageTtl;
+        ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(_packageTtl, TimeSpan.Zero);
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(_packageTtl, TimeSpan.FromMinutes(1));
     }
 
     public IReadOnlyList<CodexPackageRegistration> RegisteredPackages =>
-        _registeredPackages.Value;
+        GetRegisteredPackages();
 
     public IReadOnlyList<string> RunningExecutablePaths => GetRunningExecutablePaths();
 
@@ -48,10 +70,39 @@ public sealed class SystemCodexDiscoveryProbe : ICodexDiscoveryProbe
     public string? GetEnvironmentVariable(string name) =>
         Environment.GetEnvironmentVariable(name);
 
-    public bool IsExecutableFile(string path) =>
-        _executableCache.GetOrAdd(path, CanExecuteFile);
+    public bool FileExists(string path) => File.Exists(path);
 
-    private static bool CanExecuteFile(string path)
+    public bool IsExecutableFile(string path) => CanExecuteFile(path);
+
+    private IReadOnlyList<CodexPackageRegistration> GetRegisteredPackages()
+    {
+        lock (_packageSync)
+        {
+            var now = _timeProvider.GetUtcNow();
+            if (_registeredPackages.Count > 0 && now < _packageExpiresAt)
+            {
+                return _registeredPackages;
+            }
+
+            IReadOnlyList<CodexPackageRegistration> registrations;
+            try
+            {
+                registrations = [.. _packageRegistrationSource.GetRegistrations()];
+            }
+            catch
+            {
+                registrations = [];
+            }
+
+            _registeredPackages = registrations;
+            _packageExpiresAt = registrations.Count == 0
+                ? now
+                : now + _packageTtl;
+            return _registeredPackages;
+        }
+    }
+
+    private bool CanExecuteFile(string path)
     {
         if (!File.Exists(path))
         {
@@ -72,30 +123,7 @@ public sealed class SystemCodexDiscoveryProbe : ICodexDiscoveryProbe
             CreateNoWindow = true,
         };
         startInfo.ArgumentList.Add("--version");
-        using var process = new Process { StartInfo = startInfo };
-        try
-        {
-            if (!process.Start())
-            {
-                return false;
-            }
-
-            _ = process.StandardOutput.ReadToEndAsync();
-            _ = process.StandardError.ReadToEndAsync();
-            if (!process.WaitForExit(3000))
-            {
-                process.Kill(entireProcessTree: true);
-                process.WaitForExit();
-                return false;
-            }
-
-            return process.ExitCode == 0;
-        }
-        catch (Exception error) when (
-            error is InvalidOperationException or System.ComponentModel.Win32Exception)
-        {
-            return false;
-        }
+        return _runner.Run(startInfo, TimeSpan.FromSeconds(3)).Succeeded;
     }
 
     private static List<string> GetRunningExecutablePaths()

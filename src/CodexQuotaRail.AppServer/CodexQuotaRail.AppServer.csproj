@@ -4,6 +4,10 @@
     <ProjectReference Include="..\CodexQuotaRail.Core\CodexQuotaRail.Core.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <InternalsVisibleTo Include="CodexQuotaRail.AppServer.Tests" />
+  </ItemGroup>
+
   <PropertyGroup>
     <TargetFramework>net8.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>

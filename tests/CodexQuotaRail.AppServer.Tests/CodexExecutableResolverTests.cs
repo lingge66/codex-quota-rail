@@ -41,7 +41,11 @@ public sealed class CodexExecutableResolverTests
                 ["PATHEXT"] = ".CMD;.EXE",
                 ["ComSpec"] = @"C:\Windows\System32\cmd.exe",
             },
-            [commandPath, @"C:\path-bin\codex.exe"]);
+            [
+                commandPath,
+                @"C:\path-bin\codex.exe",
+                @"C:\Windows\System32\cmd.exe",
+            ]);
         var resolver = new CodexExecutableResolver(probe);
 
         // When
@@ -129,6 +133,30 @@ public sealed class CodexExecutableResolverTests
         Assert.DoesNotContain(scriptPath, unsupported.UserMessage, StringComparison.Ordinal);
     }
 
+    [Theory]
+    [InlineData(@"C:\missing\codex.ps1")]
+    [InlineData(@"C:\missing%TEMP%\codex.cmd")]
+    public void ResolveIgnoresMissingInvalidOverrideAndUsesValidPath(string missingOverride)
+    {
+        // Given
+        const string pathExecutable = @"C:\path-bin\codex.exe";
+        var probe = new FakeDiscoveryProbe(
+            new Dictionary<string, string?>
+            {
+                ["CODEX_QUOTA_RAIL_CODEX_PATH"] = missingOverride,
+                ["PATH"] = @"C:\path-bin",
+                ["PATHEXT"] = ".EXE",
+            },
+            [pathExecutable]);
+
+        // When
+        var resolution = new CodexExecutableResolver(probe).Resolve();
+
+        // Then
+        var found = Assert.IsType<CodexResolution.Found>(resolution);
+        Assert.Equal(pathExecutable, found.FileName);
+    }
+
     [Fact]
     public void ResolveUsesOfficialRegisteredPackageWithoutPathOrRunningProcess()
     {
@@ -199,6 +227,8 @@ public sealed class CodexExecutableResolverTests
         public string? GetEnvironmentVariable(string name) =>
             _environment.TryGetValue(name, out var value) ? value : null;
 
+        public bool FileExists(string path) => ExecutableFiles.Contains(path);
+
         public string? GetCanonicalPath(string path)
         {
             try
@@ -242,6 +272,8 @@ public sealed class CodexExecutableResolverTests
                 : Path.GetFullPath(path);
 
         public string? GetEnvironmentVariable(string name) => null;
+
+        public bool FileExists(string path) => _executableFiles.Contains(path);
 
         public bool IsExecutableFile(string path) => _executableFiles.Contains(path);
     }

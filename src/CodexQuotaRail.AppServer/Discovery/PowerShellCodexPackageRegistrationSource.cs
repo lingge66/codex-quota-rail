@@ -16,9 +16,19 @@ public sealed class PowerShellCodexPackageRegistrationSource : ICodexPackageRegi
         "[Console]::Out.WriteLine($package.Name+'" + OutputSeparator +
         "'+$package.InstallLocation)}";
     private readonly TimeSpan _timeout;
+    private readonly IBoundedProcessRunner _runner;
 
     public PowerShellCodexPackageRegistrationSource(TimeSpan? timeout = null)
+        : this(new BoundedProcessRunner(), timeout)
     {
+    }
+
+    internal PowerShellCodexPackageRegistrationSource(
+        IBoundedProcessRunner runner,
+        TimeSpan? timeout = null)
+    {
+        ArgumentNullException.ThrowIfNull(runner);
+        _runner = runner;
         _timeout = timeout ?? TimeSpan.FromSeconds(5);
         ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(_timeout, TimeSpan.Zero);
         ArgumentOutOfRangeException.ThrowIfGreaterThan(
@@ -33,10 +43,10 @@ public sealed class PowerShellCodexPackageRegistrationSource : ICodexPackageRegi
             return [];
         }
 
-        return GetRegistrationsAsync().GetAwaiter().GetResult();
+        return GetRegistrationsCore();
     }
 
-    private async Task<IReadOnlyList<CodexPackageRegistration>> GetRegistrationsAsync()
+    private List<CodexPackageRegistration> GetRegistrationsCore()
     {
         var executable = Path.Combine(
             Environment.SystemDirectory,
@@ -56,36 +66,10 @@ public sealed class PowerShellCodexPackageRegistrationSource : ICodexPackageRegi
         startInfo.ArgumentList.Add("-NonInteractive");
         startInfo.ArgumentList.Add("-Command");
         startInfo.ArgumentList.Add(Query);
-        using var process = new Process { StartInfo = startInfo };
-        try
-        {
-            if (!process.Start())
-            {
-                return [];
-            }
-        }
-        catch (Exception error) when (
-            error is InvalidOperationException or System.ComponentModel.Win32Exception)
-        {
-            return [];
-        }
-
-        var outputTask = process.StandardOutput.ReadToEndAsync();
-        var errorTask = process.StandardError.ReadToEndAsync();
-        using var timeout = new CancellationTokenSource(_timeout);
-        try
-        {
-            await process.WaitForExitAsync(timeout.Token).ConfigureAwait(false);
-        }
-        catch (OperationCanceledException) when (timeout.IsCancellationRequested)
-        {
-            TryKill(process);
-            return [];
-        }
-
-        var output = await outputTask.ConfigureAwait(false);
-        _ = await errorTask.ConfigureAwait(false);
-        return process.ExitCode == 0 ? Parse(output) : [];
+        var result = _runner.Run(startInfo, _timeout);
+        return result.Succeeded && !result.StandardOutputTruncated
+            ? Parse(result.StandardOutput)
+            : [];
     }
 
     private static List<CodexPackageRegistration> Parse(string output)
@@ -110,20 +94,5 @@ public sealed class PowerShellCodexPackageRegistrationSource : ICodexPackageRegi
         }
 
         return registrations;
-    }
-
-    private static void TryKill(Process process)
-    {
-        try
-        {
-            if (!process.HasExited)
-            {
-                process.Kill(entireProcessTree: true);
-                process.WaitForExit();
-            }
-        }
-        catch
-        {
-        }
     }
 }

@@ -27,6 +27,8 @@ public interface ICodexDiscoveryProbe
 
     string? GetEnvironmentVariable(string name);
 
+    bool FileExists(string path);
+
     bool IsExecutableFile(string path);
 }
 
@@ -121,6 +123,11 @@ public sealed partial class CodexExecutableResolver
             return null;
         }
 
+        if (!_probe.FileExists(canonicalPath))
+        {
+            return null;
+        }
+
         var extension = Path.GetExtension(canonicalPath);
         if (!IsSupportedExtension(extension))
         {
@@ -173,6 +180,7 @@ public sealed partial class CodexExecutableResolver
             ? null
             : _probe.GetCanonicalPath(candidate);
         return canonicalPath is not null &&
+            _probe.FileExists(canonicalPath) &&
             Path.GetFileName(canonicalPath).Equals("cmd.exe", StringComparison.OrdinalIgnoreCase)
                 ? canonicalPath
                 : null;

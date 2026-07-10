@@ -59,6 +59,19 @@ public sealed class CmdLaunchSecurityTests
         Assert.DoesNotContain(unsafePath, unsupported.UserMessage, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void CmdShimRejectsMissingCommandInterpreter()
+    {
+        // Given
+        var resolver = new CodexExecutableResolver(new MissingInterpreterProbe());
+
+        // When
+        var resolution = resolver.Resolve();
+
+        // Then
+        Assert.IsType<CodexResolution.Unsupported>(resolution);
+    }
+
     private static async Task<ProcessResult> RunAsync(
         CodexQuotaRail.AppServer.Transport.ProcessLaunchSpec launch,
         CancellationToken cancellationToken)
@@ -92,6 +105,8 @@ public sealed class CmdLaunchSecurityTests
             _ => null,
         };
 
+        public bool FileExists(string path) => File.Exists(path);
+
         public bool IsExecutableFile(string path) => File.Exists(path);
     }
 
@@ -110,7 +125,31 @@ public sealed class CmdLaunchSecurityTests
             _ => null,
         };
 
+        public bool FileExists(string path) => true;
+
         public bool IsExecutableFile(string path) => true;
+    }
+
+    private sealed class MissingInterpreterProbe : ICodexDiscoveryProbe
+    {
+        private const string CommandPath = @"C:\tools\codex.cmd";
+
+        public IReadOnlyList<CodexPackageRegistration> RegisteredPackages => [];
+
+        public IReadOnlyList<string> RunningExecutablePaths => [];
+
+        public string? GetCanonicalPath(string path) => Path.GetFullPath(path);
+
+        public string? GetEnvironmentVariable(string name) => name switch
+        {
+            "CODEX_QUOTA_RAIL_CODEX_PATH" => CommandPath,
+            "ComSpec" => @"C:\missing\cmd.exe",
+            _ => null,
+        };
+
+        public bool FileExists(string path) => path == CommandPath;
+
+        public bool IsExecutableFile(string path) => path == CommandPath;
     }
 
     private sealed record ProcessResult(

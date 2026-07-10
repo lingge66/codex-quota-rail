@@ -38,6 +38,8 @@ internal sealed class FakeSourceDiscoveryProbe(string executablePath) : ICodexDi
     public string? GetEnvironmentVariable(string name) =>
         name == "CODEX_QUOTA_RAIL_CODEX_PATH" ? executablePath : null;
 
+    public bool FileExists(string path) => path == executablePath;
+
     public string? GetCanonicalPath(string path) => Path.GetFullPath(path);
 
     public bool IsExecutableFile(string path) => path == executablePath;
