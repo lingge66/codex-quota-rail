@@ -348,6 +348,69 @@ public sealed class JsonRpcConnectionTests
     }
 
     [Fact]
+    public async Task NotificationHandlerCanSynchronouslyWaitForDispose()
+    {
+        var transport = new FakeJsonLineTransport();
+        var connection = new JsonRpcConnection(transport);
+        var callbackResult = NewCompletionSource<Exception?>();
+        await StartAndInitializeAsync(connection, transport);
+        connection.NotificationReceived += (_, _) =>
+        {
+            try
+            {
+                connection.DisposeAsync()
+                    .AsTask()
+                    .WaitAsync(ImmediateFailureTimeout)
+                    .GetAwaiter()
+                    .GetResult();
+                callbackResult.TrySetResult(null);
+            }
+            catch (Exception error)
+            {
+                callbackResult.TrySetResult(error);
+            }
+        };
+
+        transport.QueueIncoming(
+            "{\"method\":\"account/rateLimits/updated\",\"params\":{}}");
+
+        var callbackError = await callbackResult.Task.WaitAsync(TestTimeout);
+        await connection.DisposeAsync().AsTask().WaitAsync(TestTimeout);
+        Assert.Null(callbackError);
+    }
+
+    [Fact]
+    public async Task ProtocolErrorHandlerCanSynchronouslyWaitForDispose()
+    {
+        var transport = new FakeJsonLineTransport();
+        var connection = new JsonRpcConnection(transport);
+        var callbackResult = NewCompletionSource<Exception?>();
+        await StartAndInitializeAsync(connection, transport);
+        connection.ProtocolError += (_, _) =>
+        {
+            try
+            {
+                connection.DisposeAsync()
+                    .AsTask()
+                    .WaitAsync(ImmediateFailureTimeout)
+                    .GetAwaiter()
+                    .GetResult();
+                callbackResult.TrySetResult(null);
+            }
+            catch (Exception error)
+            {
+                callbackResult.TrySetResult(error);
+            }
+        };
+
+        transport.QueueIncoming("{\"malformed\":");
+
+        var callbackError = await callbackResult.Task.WaitAsync(TestTimeout);
+        await connection.DisposeAsync().AsTask().WaitAsync(TestTimeout);
+        Assert.Null(callbackError);
+    }
+
+    [Fact]
     public async Task StartAsyncStartsTransportAndExactlyOneBackgroundReader()
     {
         var transport = new FakeJsonLineTransport();
@@ -474,7 +537,39 @@ public sealed class JsonRpcConnectionTests
     }
 
     [Fact]
-    public async Task DisposeWaitsForInFlightStartAndDoesNotPublishReader()
+    public async Task CancellationCallbackReentrantDisposeSharesCleanupTask()
+    {
+        var transport = new FakeJsonLineTransport();
+        var connection = new JsonRpcConnection(transport);
+        Task? reentrantDispose = null;
+        var reentryCount = 0;
+        transport.StartCancellationCallback = () =>
+        {
+            Interlocked.Increment(ref reentryCount);
+            reentrantDispose = connection.DisposeAsync().AsTask();
+        };
+        await connection.StartAsync(CancellationToken.None);
+
+        var outerDispose = connection.DisposeAsync().AsTask();
+        var outerError = await Record.ExceptionAsync(
+            () => outerDispose.WaitAsync(ImmediateFailureTimeout));
+        Exception? reentrantError = null;
+        if (reentrantDispose is not null)
+        {
+            reentrantError = await Record.ExceptionAsync(
+                () => reentrantDispose.WaitAsync(ImmediateFailureTimeout));
+        }
+
+        Assert.Null(outerError);
+        Assert.NotNull(reentrantDispose);
+        Assert.Null(reentrantError);
+        Assert.Same(outerDispose, reentrantDispose);
+        Assert.Equal(1, Volatile.Read(ref reentryCount));
+        Assert.Equal(1, transport.DisposeCount);
+    }
+
+    [Fact]
+    public async Task DisposeCancelsInFlightStartWithoutManualRelease()
     {
         var transport = new FakeJsonLineTransport { PauseStart = true };
         var connection = new JsonRpcConnection(transport);
@@ -482,16 +577,58 @@ public sealed class JsonRpcConnectionTests
         var startTask = connection.StartAsync(CancellationToken.None);
         await transport.WaitUntilStartEntersAsync(CancellationToken.None).WaitAsync(TestTimeout);
         var disposeTask = connection.DisposeAsync().AsTask();
-        var disposeCompletedBeforeStart = disposeTask.IsCompleted;
+        var disposeError = await Record.ExceptionAsync(
+            () => disposeTask.WaitAsync(ImmediateFailureTimeout));
 
         transport.ReleaseStart();
         var startError = await Record.ExceptionAsync(() => startTask);
         await disposeTask.WaitAsync(TestTimeout);
 
-        Assert.False(disposeCompletedBeforeStart);
-        Assert.IsType<ObjectDisposedException>(startError);
+        Assert.Null(disposeError);
+        Assert.IsAssignableFrom<OperationCanceledException>(startError);
         Assert.Equal(0, transport.ReadCount);
         Assert.Equal(1, transport.DisposeCount);
+    }
+
+    [Fact]
+    public async Task CallerCancellationOnlyCancelsItsStartWait()
+    {
+        var transport = new FakeJsonLineTransport { PauseStart = true };
+        await using var connection = new JsonRpcConnection(transport);
+        var protocolErrorCount = 0;
+        connection.ProtocolError += (_, _) => Interlocked.Increment(ref protocolErrorCount);
+        using var callerCancellation = new CancellationTokenSource();
+
+        var callerWait = connection.StartAsync(callerCancellation.Token);
+        await transport.WaitUntilStartEntersAsync(CancellationToken.None).WaitAsync(TestTimeout);
+        callerCancellation.Cancel();
+        var callerError = await Record.ExceptionAsync(() => callerWait);
+
+        Task? sharedStart = null;
+        Exception? sharedStartError = null;
+        try
+        {
+            sharedStart = connection.StartAsync(CancellationToken.None);
+        }
+        catch (Exception error)
+        {
+            sharedStartError = error;
+        }
+
+        transport.ReleaseStart();
+        if (sharedStart is not null)
+        {
+            sharedStartError = await Record.ExceptionAsync(() => sharedStart);
+        }
+
+        if (sharedStartError is null)
+        {
+            await StartAndInitializeAsync(connection, transport);
+        }
+
+        Assert.IsAssignableFrom<OperationCanceledException>(callerError);
+        Assert.Null(sharedStartError);
+        Assert.Equal(0, Volatile.Read(ref protocolErrorCount));
     }
 
     [Fact]
@@ -558,12 +695,12 @@ public sealed class JsonRpcConnectionTests
 
             firstDispose = transport.DisposeAsync().AsTask();
             secondDispose = transport.DisposeAsync().AsTask();
-            var secondCompletedEarly = secondDispose.IsCompleted;
+            var sharedCleanupTask = ReferenceEquals(firstDispose, secondDispose);
 
             releaseDiagnostic.Set();
             await Task.WhenAll(firstDispose, secondDispose).WaitAsync(TestTimeout);
 
-            Assert.False(secondCompletedEarly);
+            Assert.True(sharedCleanupTask);
         }
         finally
         {
@@ -578,6 +715,44 @@ public sealed class JsonRpcConnectionTests
                 await secondDispose.WaitAsync(TestTimeout);
             }
 
+            await transport.DisposeAsync();
+        }
+    }
+
+    [Fact]
+    public async Task ProcessDiagnosticHandlerCanSynchronouslyWaitForDispose()
+    {
+        var callbackResult = NewCompletionSource<Exception?>();
+        ProcessJsonLineTransport? transport = null;
+        transport = new ProcessJsonLineTransport(
+            new ProcessLaunchSpec("powershell.exe", BlockingCleanupArguments),
+            _ =>
+            {
+                try
+                {
+                    transport!.DisposeAsync()
+                        .AsTask()
+                        .WaitAsync(ImmediateFailureTimeout)
+                        .GetAwaiter()
+                        .GetResult();
+                    callbackResult.TrySetResult(null);
+                }
+                catch (Exception error)
+                {
+                    callbackResult.TrySetResult(error);
+                }
+            });
+        using var timeout = new CancellationTokenSource(TestTimeout);
+
+        try
+        {
+            await transport.StartAsync(timeout.Token);
+            var callbackError = await callbackResult.Task.WaitAsync(TestTimeout);
+            await transport.DisposeAsync().AsTask().WaitAsync(TestTimeout);
+            Assert.Null(callbackError);
+        }
+        finally
+        {
             await transport.DisposeAsync();
         }
     }

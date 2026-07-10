@@ -18,6 +18,7 @@ internal sealed class FakeJsonLineTransport : IJsonLineTransport
         new(TaskCreationOptions.RunContinuationsAsynchronously);
     private readonly TaskCompletionSource _startEntered =
         new(TaskCreationOptions.RunContinuationsAsynchronously);
+    private CancellationTokenRegistration _startCancellationRegistration;
     private int _disposeCount;
     private int _readCount;
     private int _startCount;
@@ -34,11 +35,20 @@ internal sealed class FakeJsonLineTransport : IJsonLineTransport
 
     public bool PauseStart { get; init; }
 
+    public Action? StartCancellationCallback { get; set; }
+
     public async Task StartAsync(CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
         Interlocked.Increment(ref _startCount);
         _startEntered.TrySetResult();
+        if (StartCancellationCallback is not null)
+        {
+            _startCancellationRegistration = cancellationToken.UnsafeRegister(
+                static state => ((Action)state!).Invoke(),
+                StartCancellationCallback);
+        }
+
         if (PauseStart)
         {
             await _releaseStart.Task.WaitAsync(cancellationToken);
@@ -91,20 +101,27 @@ internal sealed class FakeJsonLineTransport : IJsonLineTransport
 
     public async ValueTask DisposeAsync()
     {
-        if (Interlocked.Increment(ref _disposeCount) == 1)
+        try
         {
-            _incoming.Writer.TryComplete();
-            _outgoing.Writer.TryComplete();
-            _disposeStarted.TrySetResult();
-            if (PauseDispose)
+            if (Interlocked.Increment(ref _disposeCount) == 1)
             {
-                await _releaseDispose.Task;
-            }
+                _incoming.Writer.TryComplete();
+                _outgoing.Writer.TryComplete();
+                _disposeStarted.TrySetResult();
+                if (PauseDispose)
+                {
+                    await _releaseDispose.Task;
+                }
 
-            if (DisposeException is not null)
-            {
-                throw DisposeException;
+                if (DisposeException is not null)
+                {
+                    throw DisposeException;
+                }
             }
+        }
+        finally
+        {
+            _startCancellationRegistration.Dispose();
         }
     }
 }

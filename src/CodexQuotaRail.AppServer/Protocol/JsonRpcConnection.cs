@@ -13,6 +13,7 @@ public sealed class JsonRpcConnection : IAsyncDisposable
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
     };
 
+    private readonly OrderedCallbackDispatcher _callbackDispatcher = new();
     private readonly CancellationTokenSource _lifetimeCancellation = new();
     private readonly object _lifecycleLock = new();
     private readonly ConcurrentDictionary<long, TaskCompletionSource<JsonElement>> _pendingRequests = new();
@@ -37,18 +38,21 @@ public sealed class JsonRpcConnection : IAsyncDisposable
 
     public Task StartAsync(CancellationToken cancellationToken)
     {
+        Task startTask;
         lock (_lifecycleLock)
         {
             switch (_state)
             {
                 case ConnectionState.Created:
                     _state = ConnectionState.Starting;
-                    return _startTask = StartCoreAsync(cancellationToken);
+                    startTask = _startTask = StartCoreAsync();
+                    break;
                 case ConnectionState.Starting:
                 case ConnectionState.Started:
                 case ConnectionState.Initializing:
                 case ConnectionState.Initialized:
-                    return _startTask!;
+                    startTask = _startTask!;
+                    break;
                 case ConnectionState.Terminal:
                     throw _terminalError!;
                 case ConnectionState.Disposing:
@@ -58,6 +62,10 @@ public sealed class JsonRpcConnection : IAsyncDisposable
                     throw new InvalidOperationException("未知的 App Server 连接状态。");
             }
         }
+
+        return cancellationToken.CanBeCanceled
+            ? startTask.WaitAsync(cancellationToken)
+            : startTask;
     }
 
     public async Task InitializeAsync(Version version, CancellationToken cancellationToken)
@@ -204,16 +212,49 @@ public sealed class JsonRpcConnection : IAsyncDisposable
 
     public ValueTask DisposeAsync()
     {
+        TaskCompletionSource? cleanupOwner = null;
+        Task? startTask = null;
+        Task cleanupTask;
         lock (_lifecycleLock)
         {
-            if (_disposeTask is not null)
+            if (_disposeTask is null)
             {
-                return new ValueTask(_disposeTask);
+                cleanupOwner = new TaskCompletionSource(
+                    TaskCreationOptions.RunContinuationsAsynchronously);
+                _disposeTask = cleanupOwner.Task;
+                startTask = _startTask;
+                _state = ConnectionState.Disposing;
             }
 
-            _state = ConnectionState.Disposing;
-            _disposeTask = DisposeCoreAsync(_startTask);
-            return new ValueTask(_disposeTask);
+            cleanupTask = _disposeTask;
+        }
+
+        if (cleanupOwner is not null)
+        {
+            _callbackDispatcher.Stop();
+            _ = CompleteDisposeAsync(cleanupOwner, startTask);
+        }
+
+        return new ValueTask(cleanupTask);
+    }
+
+    private async Task CompleteDisposeAsync(
+        TaskCompletionSource completion,
+        Task? startTask)
+    {
+        try
+        {
+            await DisposeCoreAsync(startTask).ConfigureAwait(false);
+            completion.TrySetResult();
+        }
+        catch (AppServerProtocolException error)
+        {
+            completion.TrySetException(error);
+        }
+        catch
+        {
+            completion.TrySetException(
+                new AppServerProtocolException("清理 App Server 连接失败。"));
         }
     }
 
@@ -297,11 +338,15 @@ public sealed class JsonRpcConnection : IAsyncDisposable
         }
     }
 
-    private async Task StartCoreAsync(CancellationToken cancellationToken)
+    private async Task StartCoreAsync()
     {
         try
         {
-            await _transport.StartAsync(cancellationToken).ConfigureAwait(false);
+            await _transport.StartAsync(_lifetimeCancellation.Token).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (_lifetimeCancellation.IsCancellationRequested)
+        {
+            throw;
         }
         catch
         {
@@ -507,6 +552,13 @@ public sealed class JsonRpcConnection : IAsyncDisposable
             return;
         }
 
+        _callbackDispatcher.Dispatch(() => InvokeNotificationHandlers(handlers, notification));
+    }
+
+    private void InvokeNotificationHandlers(
+        EventHandler<JsonRpcNotification> handlers,
+        JsonRpcNotification notification)
+    {
         foreach (var subscriber in handlers.GetInvocationList())
         {
             try
@@ -527,6 +579,13 @@ public sealed class JsonRpcConnection : IAsyncDisposable
             return;
         }
 
+        _callbackDispatcher.Dispatch(() => InvokeProtocolErrorHandlers(handlers, error));
+    }
+
+    private void InvokeProtocolErrorHandlers(
+        EventHandler<AppServerProtocolException> handlers,
+        AppServerProtocolException error)
+    {
         foreach (var subscriber in handlers.GetInvocationList())
         {
             try

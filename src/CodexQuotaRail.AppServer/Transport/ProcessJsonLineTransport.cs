@@ -11,6 +11,7 @@ public sealed record ProcessDiagnostic(string EventName, int CharacterCount);
 public sealed class ProcessJsonLineTransport : IJsonLineTransport
 {
     private readonly Action<ProcessDiagnostic>? _diagnosticSink;
+    private readonly OrderedCallbackDispatcher _diagnosticDispatcher = new();
     private readonly ProcessLaunchSpec _launchSpec;
     private readonly CancellationTokenSource _lifetimeCancellation = new();
     private readonly object _stateLock = new();
@@ -129,10 +130,44 @@ public sealed class ProcessJsonLineTransport : IJsonLineTransport
 
     public ValueTask DisposeAsync()
     {
+        TaskCompletionSource? cleanupOwner = null;
+        Task cleanupTask;
         lock (_stateLock)
         {
-            _disposeTask ??= DisposeCoreAsync();
-            return new ValueTask(_disposeTask);
+            if (_disposeTask is null)
+            {
+                cleanupOwner = new TaskCompletionSource(
+                    TaskCreationOptions.RunContinuationsAsynchronously);
+                _disposeTask = cleanupOwner.Task;
+            }
+
+            cleanupTask = _disposeTask;
+        }
+
+        if (cleanupOwner is not null)
+        {
+            _diagnosticDispatcher.Stop();
+            _ = CompleteDisposeAsync(cleanupOwner);
+        }
+
+        return new ValueTask(cleanupTask);
+    }
+
+    private async Task CompleteDisposeAsync(TaskCompletionSource completion)
+    {
+        try
+        {
+            await DisposeCoreAsync().ConfigureAwait(false);
+            completion.TrySetResult();
+        }
+        catch (AppServerProtocolException error)
+        {
+            completion.TrySetException(error);
+        }
+        catch
+        {
+            completion.TrySetException(
+                new AppServerProtocolException("清理 App Server 进程失败。"));
         }
     }
 
@@ -269,13 +304,13 @@ public sealed class ProcessJsonLineTransport : IJsonLineTransport
 
     private void ReportDiagnostic(ProcessDiagnostic diagnostic)
     {
-        try
+        var diagnosticSink = _diagnosticSink;
+        if (diagnosticSink is null)
         {
-            _diagnosticSink?.Invoke(diagnostic);
+            return;
         }
-        catch
-        {
-        }
+
+        _diagnosticDispatcher.Dispatch(() => diagnosticSink(diagnostic));
     }
 
     private Process GetStartedProcess()
