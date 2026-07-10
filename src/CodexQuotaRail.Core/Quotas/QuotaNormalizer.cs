@@ -24,7 +24,7 @@ public static class QuotaNormalizer
             return new(source.Label, null, Duration(source), Reset(source), QuotaWindowState.Unavailable);
         }
 
-        var available = Math.Clamp(100 - source.UsedPercent.Value, 0, 100);
+        var available = (int)Math.Clamp(100L - source.UsedPercent.Value, 0L, 100L);
         var state = available switch
         {
             0 => QuotaWindowState.Exhausted,

@@ -19,6 +19,17 @@ public sealed class QuotaNormalizerTests
     }
 
     [Fact]
+    public void ExtremeNegativeUsedPercentIsClampedBeforeConverting()
+    {
+        var source = new RawQuotaWindow("5 小时", int.MinValue, 300, null, false);
+
+        var result = QuotaNormalizer.NormalizeWindow(source);
+
+        Assert.Equal(100, result.AvailablePercent);
+        Assert.Equal(QuotaWindowState.Healthy, result.State);
+    }
+
+    [Fact]
     public void MissingUsedPercentIsUnavailableNotFull()
     {
         var source = new RawQuotaWindow("5 小时", null, 300, null, false);
