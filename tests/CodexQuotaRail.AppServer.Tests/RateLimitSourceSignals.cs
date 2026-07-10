@@ -31,12 +31,14 @@ internal sealed class FakeRateLimitAvailabilitySignal : IRateLimitAvailabilitySi
 
 internal sealed class FakeSourceDiscoveryProbe(string executablePath) : ICodexDiscoveryProbe
 {
-    public IReadOnlyList<string> InstalledPackageExecutablePaths => [];
+    public IReadOnlyList<CodexPackageRegistration> RegisteredPackages => [];
 
     public IReadOnlyList<string> RunningExecutablePaths => [];
 
     public string? GetEnvironmentVariable(string name) =>
         name == "CODEX_QUOTA_RAIL_CODEX_PATH" ? executablePath : null;
+
+    public string? GetCanonicalPath(string path) => Path.GetFullPath(path);
 
     public bool IsExecutableFile(string path) => path == executablePath;
 }

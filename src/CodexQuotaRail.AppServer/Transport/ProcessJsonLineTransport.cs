@@ -4,11 +4,23 @@ using CodexQuotaRail.AppServer.Protocol;
 
 namespace CodexQuotaRail.AppServer.Transport;
 
-public sealed record ProcessLaunchSpec(string FileName, IReadOnlyList<string> Arguments);
+public sealed record ProcessLaunchSpec(string FileName, IReadOnlyList<string> Arguments)
+{
+    internal string? CompleteCommandLine { get; private init; }
+
+    internal static ProcessLaunchSpec FromCompleteCommandLine(
+        string fileName,
+        IReadOnlyList<string> logicalArguments,
+        string completeCommandLine) =>
+        new(fileName, logicalArguments)
+        {
+            CompleteCommandLine = completeCommandLine,
+        };
+}
 
 public sealed record ProcessDiagnostic(string EventName, int CharacterCount);
 
-public sealed class ProcessJsonLineTransport : IJsonLineTransport
+public sealed partial class ProcessJsonLineTransport : IJsonLineTransport
 {
     private readonly Action<ProcessDiagnostic>? _diagnosticSink;
     private readonly OrderedCallbackDispatcher _diagnosticDispatcher = new();
@@ -58,9 +70,16 @@ public sealed class ProcessJsonLineTransport : IJsonLineTransport
                 CreateNoWindow = true,
             };
 
-            foreach (var argument in _launchSpec.Arguments)
+            if (_launchSpec.CompleteCommandLine is { } completeCommandLine)
             {
-                startInfo.ArgumentList.Add(argument);
+                startInfo.Arguments = completeCommandLine;
+            }
+            else
+            {
+                foreach (var argument in _launchSpec.Arguments)
+                {
+                    startInfo.ArgumentList.Add(argument);
+                }
             }
 
             var process = new Process
@@ -127,154 +146,6 @@ public sealed class ProcessJsonLineTransport : IJsonLineTransport
             }
 
             yield return line;
-        }
-    }
-
-    public ValueTask DisposeAsync()
-    {
-        TaskCompletionSource? cleanupOwner = null;
-        Task cleanupTask;
-        lock (_stateLock)
-        {
-            if (_disposeTask is null)
-            {
-                cleanupOwner = new TaskCompletionSource(
-                    TaskCreationOptions.RunContinuationsAsynchronously);
-                _disposeTask = cleanupOwner.Task;
-            }
-
-            cleanupTask = _disposeTask;
-        }
-
-        if (cleanupOwner is not null)
-        {
-            _diagnosticDispatcher.Stop();
-            _ = CompleteDisposeAsync(cleanupOwner);
-        }
-
-        return new ValueTask(cleanupTask);
-    }
-
-    private async Task CompleteDisposeAsync(TaskCompletionSource completion)
-    {
-        try
-        {
-            await DisposeCoreAsync().ConfigureAwait(false);
-            completion.TrySetResult();
-        }
-        catch (AppServerProtocolException error)
-        {
-            completion.TrySetException(error);
-        }
-        catch
-        {
-            completion.TrySetException(
-                new AppServerProtocolException("清理 App Server 进程失败。"));
-        }
-    }
-
-    private async Task DisposeCoreAsync()
-    {
-        var cleanupFailed = false;
-        Process? process;
-        Task? stderrTask;
-        lock (_stateLock)
-        {
-            process = _process;
-            _process = null;
-            stderrTask = _stderrTask;
-            _stderrTask = null;
-        }
-
-        try
-        {
-            try
-            {
-                _lifetimeCancellation.Cancel();
-            }
-            catch
-            {
-                cleanupFailed = true;
-            }
-
-            if (process is not null)
-            {
-                try
-                {
-                    process.StandardInput.Close();
-                }
-                catch
-                {
-                    cleanupFailed = true;
-                }
-
-                var shouldWaitForExit = false;
-                try
-                {
-                    if (!process.HasExited)
-                    {
-                        process.Kill(entireProcessTree: true);
-                    }
-
-                    shouldWaitForExit = true;
-                }
-                catch
-                {
-                    cleanupFailed = true;
-                }
-
-                if (shouldWaitForExit)
-                {
-                    try
-                    {
-                        await process.WaitForExitAsync(CancellationToken.None).ConfigureAwait(false);
-                    }
-                    catch
-                    {
-                        cleanupFailed = true;
-                    }
-                }
-            }
-
-            if (stderrTask is not null)
-            {
-                try
-                {
-                    await stderrTask.ConfigureAwait(false);
-                }
-                catch (OperationCanceledException) when (_lifetimeCancellation.IsCancellationRequested)
-                {
-                }
-                catch
-                {
-                    cleanupFailed = true;
-                }
-            }
-        }
-        finally
-        {
-            try
-            {
-                process?.Dispose();
-            }
-            catch
-            {
-                cleanupFailed = true;
-            }
-
-            try
-            {
-                _lifetimeCancellation.Dispose();
-            }
-            catch
-            {
-                cleanupFailed = true;
-            }
-        }
-
-        if (cleanupFailed)
-        {
-            throw new AppServerProtocolException("清理 App Server 进程失败。");
         }
     }
 

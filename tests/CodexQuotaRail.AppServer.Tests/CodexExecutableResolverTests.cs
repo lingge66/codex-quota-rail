@@ -30,7 +30,7 @@ public sealed class CodexExecutableResolverTests
     }
 
     [Fact]
-    public void ResolveUsesPathextOrderAndWrapsCmdWithoutShellConcatenation()
+    public void ResolveUsesPathextOrderAndBuildsValidatedSingleCmdCommand()
     {
         // Given
         const string commandPath = @"C:\path-bin\codex.cmd";
@@ -51,7 +51,13 @@ public sealed class CodexExecutableResolverTests
         // Then
         Assert.Equal(@"C:\Windows\System32\cmd.exe", launch.FileName);
         Assert.Equal(
-            ["/d", "/s", "/c", commandPath, "app-server", "--listen", "stdio://"],
+            [
+                "/d",
+                "/s",
+                "/v:off",
+                "/c",
+                $"\"{commandPath}\" \"app-server\" \"--listen\" \"stdio://\"",
+            ],
             launch.Arguments);
     }
 
@@ -59,8 +65,10 @@ public sealed class CodexExecutableResolverTests
     public void ResolveFallsBackFromInvalidOverrideToRunningThenPackageCandidates()
     {
         // Given
-        const string runningPath = @"C:\Codex\resources\codex.exe";
-        const string packagePath = @"C:\WindowsApps\OpenAI.Codex\codex.exe";
+        const string runningRoot = @"C:\WindowsApps\OpenAI.Codex.Running";
+        const string packageRoot = @"C:\WindowsApps\OpenAI.Codex.Installed";
+        var runningPath = Path.Combine(runningRoot, "app", "resources", "codex.exe");
+        var packagePath = Path.Combine(packageRoot, "app", "resources", "codex.exe");
         var probe = new FakeDiscoveryProbe(
             new Dictionary<string, string?>
             {
@@ -68,7 +76,10 @@ public sealed class CodexExecutableResolverTests
             },
             [runningPath, packagePath],
             [runningPath],
-            [packagePath]);
+            [
+                new CodexPackageRegistration("OpenAI.Codex", runningRoot),
+                new CodexPackageRegistration("OpenAI.Codex", packageRoot),
+            ]);
 
         // When
         var first = Assert.IsType<CodexResolution.Found>(
@@ -118,6 +129,49 @@ public sealed class CodexExecutableResolverTests
         Assert.DoesNotContain(scriptPath, unsupported.UserMessage, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void ResolveUsesOfficialRegisteredPackageWithoutPathOrRunningProcess()
+    {
+        // Given
+        const string packageRoot = @"C:\Program Files\WindowsApps\OpenAI.Codex_1.0_x64";
+        var executable = Path.Combine(packageRoot, "app", "resources", "codex.exe");
+        var probe = new PackageOnlyProbe(
+            [new CodexPackageRegistration("OpenAI.Codex", packageRoot)],
+            [executable]);
+
+        // When
+        var resolution = new CodexExecutableResolver(probe).Resolve();
+
+        // Then
+        var found = Assert.IsType<CodexResolution.Found>(resolution);
+        Assert.Equal(executable, found.FileName);
+    }
+
+    [Fact]
+    public void ResolveRejectsLookalikePackageIdentityAndEscapingCanonicalTarget()
+    {
+        // Given
+        const string packageRoot = @"C:\Program Files\WindowsApps\OpenAI.Codex_1.0_x64";
+        var packageExecutable = Path.Combine(packageRoot, "app", "resources", "codex.exe");
+        const string outsideTarget = @"C:\Temp\codex.exe";
+        var probe = new PackageOnlyProbe(
+            [
+                new CodexPackageRegistration("OpenAI.Codex.Fake", packageRoot),
+                new CodexPackageRegistration("OpenAI.Codex", packageRoot),
+            ],
+            [outsideTarget],
+            new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                [packageExecutable] = outsideTarget,
+            });
+
+        // When
+        var resolution = new CodexExecutableResolver(probe).Resolve();
+
+        // Then
+        Assert.IsType<CodexResolution.Missing>(resolution);
+    }
+
     private sealed class FakeDiscoveryProbe : ICodexDiscoveryProbe
     {
         private readonly IReadOnlyDictionary<string, string?> _environment;
@@ -126,25 +180,69 @@ public sealed class CodexExecutableResolverTests
             IReadOnlyDictionary<string, string?> environment,
             IEnumerable<string> executableFiles,
             IReadOnlyList<string>? runningPaths = null,
-            IReadOnlyList<string>? packagePaths = null)
+            IReadOnlyList<CodexPackageRegistration>? registeredPackages = null)
         {
             _environment = environment;
             ExecutableFiles = new HashSet<string>(
                 executableFiles,
                 StringComparer.OrdinalIgnoreCase);
             RunningExecutablePaths = runningPaths ?? [];
-            InstalledPackageExecutablePaths = packagePaths ?? [];
+            RegisteredPackages = registeredPackages ?? [];
         }
 
         public HashSet<string> ExecutableFiles { get; }
 
         public IReadOnlyList<string> RunningExecutablePaths { get; }
 
-        public IReadOnlyList<string> InstalledPackageExecutablePaths { get; }
+        public IReadOnlyList<CodexPackageRegistration> RegisteredPackages { get; }
 
         public string? GetEnvironmentVariable(string name) =>
             _environment.TryGetValue(name, out var value) ? value : null;
 
+        public string? GetCanonicalPath(string path)
+        {
+            try
+            {
+                return Path.GetFullPath(path);
+            }
+            catch (Exception error) when (
+                error is ArgumentException or IOException or NotSupportedException)
+            {
+                return null;
+            }
+        }
+
         public bool IsExecutableFile(string path) => ExecutableFiles.Contains(path);
+    }
+
+    private sealed class PackageOnlyProbe : ICodexDiscoveryProbe
+    {
+        private readonly IReadOnlyDictionary<string, string> _canonicalPaths;
+        private readonly HashSet<string> _executableFiles;
+
+        public PackageOnlyProbe(
+            IReadOnlyList<CodexPackageRegistration> registrations,
+            IEnumerable<string> executableFiles,
+            IReadOnlyDictionary<string, string>? canonicalPaths = null)
+        {
+            RegisteredPackages = registrations;
+            _executableFiles = new HashSet<string>(
+                executableFiles,
+                StringComparer.OrdinalIgnoreCase);
+            _canonicalPaths = canonicalPaths ?? new Dictionary<string, string>();
+        }
+
+        public IReadOnlyList<CodexPackageRegistration> RegisteredPackages { get; }
+
+        public IReadOnlyList<string> RunningExecutablePaths => [];
+
+        public string? GetCanonicalPath(string path) =>
+            _canonicalPaths.TryGetValue(path, out var target)
+                ? target
+                : Path.GetFullPath(path);
+
+        public string? GetEnvironmentVariable(string name) => null;
+
+        public bool IsExecutableFile(string path) => _executableFiles.Contains(path);
     }
 }
