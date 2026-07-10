@@ -1,0 +1,13 @@
+# Local visual brainstorming artifacts
+.superpowers/
+.codegraph/
+
+# Build outputs (reserved for implementation)
+bin/
+obj/
+artifacts/
+
+# User-local settings and logs
+*.user
+*.suo
+logs/
