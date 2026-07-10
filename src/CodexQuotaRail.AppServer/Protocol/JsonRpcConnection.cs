@@ -38,6 +38,9 @@ public sealed class JsonRpcConnection : IAsyncDisposable
 
     public long DroppedCallbackCount => _callbackDispatcher.DroppedCount;
 
+    public long DroppedProtocolErrorCount =>
+        _callbackDispatcher.DroppedProtocolErrorCount;
+
     public Task StartAsync(CancellationToken cancellationToken)
     {
         TaskCompletionSource? startOwner = null;
@@ -565,7 +568,9 @@ public sealed class JsonRpcConnection : IAsyncDisposable
             return;
         }
 
-        _callbackDispatcher.Dispatch(() => InvokeNotificationHandlers(handlers, notification));
+        _callbackDispatcher.Dispatch(
+            () => InvokeNotificationHandlers(handlers, notification),
+            CallbackCategory.Normal);
     }
 
     private void InvokeNotificationHandlers(
@@ -592,7 +597,9 @@ public sealed class JsonRpcConnection : IAsyncDisposable
             return;
         }
 
-        _callbackDispatcher.Dispatch(() => InvokeProtocolErrorHandlers(handlers, error));
+        _callbackDispatcher.Dispatch(
+            () => InvokeProtocolErrorHandlers(handlers, error),
+            CallbackCategory.ProtocolError);
     }
 
     private void InvokeProtocolErrorHandlers(

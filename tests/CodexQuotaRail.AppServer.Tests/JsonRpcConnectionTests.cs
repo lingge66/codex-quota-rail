@@ -529,7 +529,8 @@ public sealed class JsonRpcConnectionTests
         await using var connection = new JsonRpcConnection(transport);
         using var releaseFirstCallback = new ManualResetEventSlim();
         var firstCallbackEntered = NewCompletionSource();
-        var secondSequence = NewCompletionSource<int>();
+        var allSurvivorsReceived = NewCompletionSource();
+        var observedSequences = new ConcurrentQueue<int>();
         connection.NotificationReceived += (_, notification) =>
         {
             var sequence = notification.Params.GetProperty("sequence").GetInt32();
@@ -540,7 +541,11 @@ public sealed class JsonRpcConnectionTests
                 return;
             }
 
-            secondSequence.TrySetResult(sequence);
+            observedSequences.Enqueue(sequence);
+            if (observedSequences.Count == 64)
+            {
+                allSurvivorsReceived.TrySetResult();
+            }
         };
         await StartAndInitializeAsync(connection, transport);
 
@@ -555,12 +560,89 @@ public sealed class JsonRpcConnectionTests
 
         await WaitForReadBarrierAsync(connection, transport);
         var droppedCount = connection.DroppedCallbackCount;
-        var secondCallbackStartedEarly = secondSequence.Task.IsCompleted;
+        var callbackStartedEarly = allSurvivorsReceived.Task.IsCompleted;
         releaseFirstCallback.Set();
 
-        Assert.True(droppedCount > 0);
-        Assert.False(secondCallbackStartedEarly);
-        Assert.True(await secondSequence.Task.WaitAsync(TestTimeout) > 1);
+        await allSurvivorsReceived.Task.WaitAsync(TestTimeout);
+        Assert.Equal(64, droppedCount);
+        Assert.False(callbackStartedEarly);
+        Assert.Equal(Enumerable.Range(65, 64), observedSequences);
+    }
+
+    [Fact]
+    public async Task NotificationFloodDoesNotEvictQueuedProtocolError()
+    {
+        var transport = new FakeJsonLineTransport();
+        await using var connection = new JsonRpcConnection(transport);
+        using var releaseFirstCallback = new ManualResetEventSlim();
+        var firstCallbackEntered = NewCompletionSource();
+        var protocolErrorReceived = NewCompletionSource<AppServerProtocolException>();
+        connection.NotificationReceived += (_, notification) =>
+        {
+            if (notification.Method == "test/block")
+            {
+                firstCallbackEntered.TrySetResult();
+                releaseFirstCallback.Wait();
+            }
+        };
+        connection.ProtocolError += (_, error) => protocolErrorReceived.TrySetResult(error);
+        await StartAndInitializeAsync(connection, transport);
+
+        transport.QueueIncoming("{\"method\":\"test/block\",\"params\":{}}");
+        await firstCallbackEntered.Task.WaitAsync(TestTimeout);
+        transport.QueueIncoming("{\"malformed\":");
+        for (var sequence = 1; sequence <= 128; sequence++)
+        {
+            transport.QueueIncoming(
+                $"{{\"method\":\"test/notification\",\"params\":{{\"sequence\":{sequence}}}}}");
+        }
+
+        await WaitForReadBarrierAsync(connection, transport);
+        releaseFirstCallback.Set();
+
+        var error = await protocolErrorReceived.Task.WaitAsync(ImmediateFailureTimeout);
+        Assert.Equal("收到无效的 App Server 协议消息。", error.Message);
+    }
+
+    [Fact]
+    public async Task ProtocolErrorFloodKeepsNewest64AndReportsExactDroppedCount()
+    {
+        var transport = new FakeJsonLineTransport();
+        await using var connection = new JsonRpcConnection(transport);
+        using var releaseFirstCallback = new ManualResetEventSlim();
+        var firstCallbackEntered = NewCompletionSource();
+        var allErrorsReceived = NewCompletionSource();
+        var observedMarkers = new ConcurrentQueue<int>();
+        connection.NotificationReceived += (_, notification) =>
+        {
+            if (notification.Method == "test/block")
+            {
+                firstCallbackEntered.TrySetResult();
+                releaseFirstCallback.Wait();
+            }
+        };
+        await StartAndInitializeAsync(connection, transport);
+
+        transport.QueueIncoming("{\"method\":\"test/block\",\"params\":{}}");
+        await firstCallbackEntered.Task.WaitAsync(TestTimeout);
+        for (var marker = 1; marker <= 65; marker++)
+        {
+            await QueueProtocolErrorWithMarkerAsync(
+                connection,
+                transport,
+                marker,
+                observedMarkers,
+                allErrorsReceived);
+        }
+
+        var droppedCallbackCount = connection.DroppedCallbackCount;
+        var droppedProtocolErrorCount = connection.DroppedProtocolErrorCount;
+        releaseFirstCallback.Set();
+
+        await allErrorsReceived.Task.WaitAsync(TestTimeout);
+        Assert.Equal(0, droppedCallbackCount);
+        Assert.Equal(1, droppedProtocolErrorCount);
+        Assert.Equal(Enumerable.Range(2, 64), observedMarkers);
     }
 
     [Fact]
@@ -1029,6 +1111,33 @@ public sealed class JsonRpcConnectionTests
         var barrierRequest = ParseRequest(await ReadWrittenLineAsync(transport));
         transport.QueueIncoming($"{{\"id\":{barrierRequest.Id},\"result\":{{}}}}");
         await barrierTask.WaitAsync(TestTimeout);
+    }
+
+    private static async Task QueueProtocolErrorWithMarkerAsync(
+        JsonRpcConnection connection,
+        FakeJsonLineTransport transport,
+        int marker,
+        ConcurrentQueue<int> observedMarkers,
+        TaskCompletionSource allErrorsReceived)
+    {
+        EventHandler<AppServerProtocolException> handler = (_, _) =>
+        {
+            observedMarkers.Enqueue(marker);
+            if (observedMarkers.Count == 64)
+            {
+                allErrorsReceived.TrySetResult();
+            }
+        };
+        connection.ProtocolError += handler;
+        try
+        {
+            transport.QueueIncoming("{\"malformed\":");
+            await WaitForReadBarrierAsync(connection, transport);
+        }
+        finally
+        {
+            connection.ProtocolError -= handler;
+        }
     }
 
     private static void ForceFullCollection()

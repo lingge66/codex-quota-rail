@@ -1,12 +1,19 @@
 namespace CodexQuotaRail.AppServer.Protocol;
 
+internal enum CallbackCategory
+{
+    Normal,
+    ProtocolError,
+}
+
 internal sealed class OrderedCallbackDispatcher
 {
     private const int DefaultCapacity = 64;
     private readonly int _capacity;
-    private readonly Queue<Action> _pendingCallbacks = new();
+    private readonly LinkedList<CallbackWorkItem> _pendingCallbacks = new();
     private readonly object _sync = new();
     private long _droppedCount;
+    private long _droppedProtocolErrorCount;
     private bool _stopped;
     private TaskCompletionSource _workAvailable = NewCompletionSource();
 
@@ -29,7 +36,12 @@ internal sealed class OrderedCallbackDispatcher
 
     public long DroppedCount => Interlocked.Read(ref _droppedCount);
 
-    public void Dispatch(Action callback)
+    public long DroppedProtocolErrorCount =>
+        Interlocked.Read(ref _droppedProtocolErrorCount);
+
+    public void Dispatch(
+        Action callback,
+        CallbackCategory category = CallbackCategory.Normal)
     {
         ArgumentNullException.ThrowIfNull(callback);
 
@@ -37,17 +49,31 @@ internal sealed class OrderedCallbackDispatcher
         {
             if (_stopped)
             {
-                _droppedCount++;
+                RecordDropped(category, 1);
                 return;
             }
 
             if (_pendingCallbacks.Count == _capacity)
             {
-                _ = _pendingCallbacks.Dequeue();
-                _droppedCount++;
+                var oldestNormal = FindOldestNormal();
+                if (oldestNormal is not null)
+                {
+                    _pendingCallbacks.Remove(oldestNormal);
+                    RecordDropped(CallbackCategory.Normal, 1);
+                }
+                else if (category == CallbackCategory.ProtocolError)
+                {
+                    _pendingCallbacks.RemoveFirst();
+                    RecordDropped(CallbackCategory.ProtocolError, 1);
+                }
+                else
+                {
+                    RecordDropped(CallbackCategory.Normal, 1);
+                    return;
+                }
             }
 
-            _pendingCallbacks.Enqueue(callback);
+            _pendingCallbacks.AddLast(new CallbackWorkItem(callback, category));
             _workAvailable.TrySetResult();
         }
     }
@@ -62,7 +88,22 @@ internal sealed class OrderedCallbackDispatcher
             }
 
             _stopped = true;
-            _droppedCount += _pendingCallbacks.Count;
+            var droppedNormalCount = 0;
+            var droppedProtocolErrorCount = 0;
+            foreach (var workItem in _pendingCallbacks)
+            {
+                if (workItem.Category == CallbackCategory.ProtocolError)
+                {
+                    droppedProtocolErrorCount++;
+                }
+                else
+                {
+                    droppedNormalCount++;
+                }
+            }
+
+            RecordDropped(CallbackCategory.Normal, droppedNormalCount);
+            RecordDropped(CallbackCategory.ProtocolError, droppedProtocolErrorCount);
             _pendingCallbacks.Clear();
             _workAvailable.TrySetResult();
         }
@@ -70,6 +111,35 @@ internal sealed class OrderedCallbackDispatcher
 
     private static TaskCompletionSource NewCompletionSource() =>
         new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+    private LinkedListNode<CallbackWorkItem>? FindOldestNormal()
+    {
+        for (var node = _pendingCallbacks.First; node is not null; node = node.Next)
+        {
+            if (node.Value.Category == CallbackCategory.Normal)
+            {
+                return node;
+            }
+        }
+
+        return null;
+    }
+
+    private void RecordDropped(CallbackCategory category, int count)
+    {
+        if (count == 0)
+        {
+            return;
+        }
+
+        if (category == CallbackCategory.ProtocolError)
+        {
+            Interlocked.Add(ref _droppedProtocolErrorCount, count);
+            return;
+        }
+
+        Interlocked.Add(ref _droppedCount, count);
+    }
 
     private async Task RunWorkerAsync()
     {
@@ -86,7 +156,8 @@ internal sealed class OrderedCallbackDispatcher
 
                 if (_pendingCallbacks.Count > 0)
                 {
-                    callback = _pendingCallbacks.Dequeue();
+                    callback = _pendingCallbacks.First!.Value.Callback;
+                    _pendingCallbacks.RemoveFirst();
                     workSignal = null;
                 }
                 else
@@ -119,4 +190,8 @@ internal sealed class OrderedCallbackDispatcher
             }
         }
     }
+
+    private readonly record struct CallbackWorkItem(
+        Action Callback,
+        CallbackCategory Category);
 }
