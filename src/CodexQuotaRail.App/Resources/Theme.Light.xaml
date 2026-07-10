@@ -1,0 +1,11 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <SolidColorBrush x:Key="Rail.Surface" Color="#F2F8F8F6" />
+    <SolidColorBrush x:Key="Rail.DetailSurface" Color="#FFFDFDFB" />
+    <SolidColorBrush x:Key="Rail.TrackBase" Color="#FFE3E5DF" />
+    <SolidColorBrush x:Key="Rail.TextPrimary" Color="#FF171815" />
+    <SolidColorBrush x:Key="Rail.TextSecondary" Color="#FF5F625B" />
+    <SolidColorBrush x:Key="Rail.BorderSubtle" Color="#FFD7DAD2" />
+    <SolidColorBrush x:Key="Rail.Unavailable" Color="#FF777A73" />
+    <SolidColorBrush x:Key="Rail.Shimmer" Color="#24000000" />
+</ResourceDictionary>

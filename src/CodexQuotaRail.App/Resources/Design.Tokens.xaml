@@ -1,0 +1,37 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                    xmlns:sys="clr-namespace:System;assembly=System.Runtime">
+    <FontFamily x:Key="Rail.Font.Primary">Segoe UI Variable Text, Segoe UI, Microsoft YaHei UI</FontFamily>
+    <FontFamily x:Key="Rail.Font.Mono">Cascadia Mono, Consolas</FontFamily>
+
+    <sys:Double x:Key="Rail.Height.External">22</sys:Double>
+    <sys:Double x:Key="Rail.Height.Compact">4</sys:Double>
+    <sys:Double x:Key="Rail.TrackHeight">4</sys:Double>
+    <sys:Double x:Key="Rail.FontSize.Value">11</sys:Double>
+    <sys:Double x:Key="Rail.FontSize.Label">10</sys:Double>
+    <sys:Double x:Key="Rail.FontSize.Metadata">9</sys:Double>
+    <sys:Double x:Key="Rail.FontSize.DetailTitle">13</sys:Double>
+    <sys:Double x:Key="Rail.FontSize.DetailBody">12</sys:Double>
+    <sys:Double x:Key="Rail.SingleTrackMaxWidth">380</sys:Double>
+    <sys:Double x:Key="Rail.PreviewWidth">800</sys:Double>
+    <sys:Double x:Key="Rail.LabelLineHeight">12</sys:Double>
+    <sys:Double x:Key="Rail.MarqueeWidth">48</sys:Double>
+    <sys:Double x:Key="Rail.MarqueeStart">-48</sys:Double>
+    <sys:Double x:Key="Rail.MarqueeEnd">640</sys:Double>
+    <sys:Double x:Key="Rail.ShimmerWidth">120</sys:Double>
+    <sys:Double x:Key="Rail.DetailMinWidth">280</sys:Double>
+
+    <Thickness x:Key="Rail.Padding">8,0</Thickness>
+    <Thickness x:Key="Rail.TrackMargin">4,0</Thickness>
+    <Thickness x:Key="Rail.InlineGap">8,0,0,0</Thickness>
+    <Thickness x:Key="Rail.BrandGap">0,0,8,0</Thickness>
+    <Thickness x:Key="Rail.TrackTopMargin">0,1,0,0</Thickness>
+    <Thickness x:Key="Rail.CompactTrackMargin">1,0</Thickness>
+    <Thickness x:Key="Rail.DetailPadding">12</Thickness>
+    <Thickness x:Key="Rail.DetailTitleMargin">0,0,0,8</Thickness>
+    <Thickness x:Key="Rail.DetailRowMargin">0,3</Thickness>
+    <Thickness x:Key="Rail.DetailValueMargin">16,0,0,0</Thickness>
+    <Thickness x:Key="Rail.DetailFooterMargin">0,8,0,0</Thickness>
+    <CornerRadius x:Key="Rail.RootCornerRadius">8</CornerRadius>
+    <CornerRadius x:Key="Rail.TrackCornerRadius">2</CornerRadius>
+</ResourceDictionary>

@@ -1,0 +1,325 @@
+<Window x:Class="CodexQuotaRail.App.Rail.RailWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:local="clr-namespace:CodexQuotaRail.App.Rail"
+        xmlns:quotas="clr-namespace:CodexQuotaRail.Core.Quotas;assembly=CodexQuotaRail.Core"
+        Title="Codex 额度"
+        Width="{StaticResource Rail.PreviewWidth}"
+        Height="{StaticResource Rail.Height.External}"
+        AllowsTransparency="True"
+        Background="Transparent"
+        Focusable="False"
+        ResizeMode="NoResize"
+        ShowActivated="False"
+        ShowInTaskbar="False"
+        WindowStyle="None">
+    <Window.Resources>
+        <BooleanToVisibilityConverter x:Key="BooleanToVisibility" />
+        <local:QuotaBrushConverter x:Key="QuotaBrushConverter" />
+
+        <Style x:Key="RailProgressBar" TargetType="{x:Type ProgressBar}">
+            <Setter Property="Height" Value="{StaticResource Rail.TrackHeight}" />
+            <Setter Property="Maximum" Value="100" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="Background" Value="{StaticResource Rail.TrackBase}" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="{x:Type ProgressBar}">
+                        <Grid x:Name="PART_Track" ClipToBounds="True">
+                            <Border Background="{TemplateBinding Background}"
+                                    CornerRadius="{StaticResource Rail.TrackCornerRadius}" />
+                            <Border x:Name="PART_Indicator"
+                                    HorizontalAlignment="Left"
+                                    Background="{TemplateBinding Foreground}"
+                                    CornerRadius="{StaticResource Rail.TrackCornerRadius}">
+                                <Border.RenderTransform>
+                                    <TranslateTransform />
+                                </Border.RenderTransform>
+                            </Border>
+                        </Grid>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsIndeterminate" Value="True">
+                                <Setter TargetName="PART_Indicator" Property="Width" Value="{StaticResource Rail.MarqueeWidth}" />
+                                <Trigger.EnterActions>
+                                    <BeginStoryboard x:Name="MarqueeStoryboard">
+                                        <Storyboard RepeatBehavior="Forever">
+                                            <DoubleAnimation Storyboard.TargetName="PART_Indicator"
+                                                             Storyboard.TargetProperty="(UIElement.RenderTransform).(TranslateTransform.X)"
+                                                             From="{StaticResource Rail.MarqueeStart}"
+                                                             To="{StaticResource Rail.MarqueeEnd}"
+                                                             Duration="0:0:12" />
+                                        </Storyboard>
+                                    </BeginStoryboard>
+                                </Trigger.EnterActions>
+                                <Trigger.ExitActions>
+                                    <RemoveStoryboard BeginStoryboardName="MarqueeStoryboard" />
+                                </Trigger.ExitActions>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <DataTemplate x:Key="ExternalTrackTemplate">
+            <Grid Margin="{StaticResource Rail.TrackMargin}"
+                  VerticalAlignment="Center">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                </Grid.RowDefinitions>
+                <DockPanel Grid.Row="0"
+                           Height="{StaticResource Rail.LabelLineHeight}"
+                           LastChildFill="True"
+                           Visibility="{Binding DataContext.ShowTrackText,
+                                                RelativeSource={RelativeSource AncestorType={x:Type local:RailWindow}},
+                                                Converter={StaticResource BooleanToVisibility}}">
+                    <TextBlock VerticalAlignment="Center"
+                               DockPanel.Dock="Left"
+                               FontFamily="{StaticResource Rail.Font.Primary}"
+                               FontSize="{StaticResource Rail.FontSize.Label}"
+                               FontWeight="SemiBold"
+                               Foreground="{StaticResource Rail.TextSecondary}"
+                               Text="{Binding Label}"
+                               TextTrimming="CharacterEllipsis" />
+                    <TextBlock Margin="{StaticResource Rail.InlineGap}"
+                               VerticalAlignment="Center"
+                               DockPanel.Dock="Right"
+                               FontFamily="{StaticResource Rail.Font.Primary}"
+                               FontSize="{StaticResource Rail.FontSize.Metadata}"
+                               Foreground="{StaticResource Rail.TextSecondary}"
+                               Text="{Binding ResetText}"
+                               Visibility="{Binding DataContext.ShowResetText,
+                                                    RelativeSource={RelativeSource AncestorType={x:Type local:RailWindow}},
+                                                    Converter={StaticResource BooleanToVisibility}}" />
+                    <TextBlock Margin="{StaticResource Rail.InlineGap}"
+                               VerticalAlignment="Center"
+                               DockPanel.Dock="Right"
+                               FontFamily="{StaticResource Rail.Font.Primary}"
+                               FontSize="{StaticResource Rail.FontSize.Value}"
+                               FontWeight="SemiBold"
+                               Foreground="{Binding Color, Converter={StaticResource QuotaBrushConverter}}"
+                               Text="{Binding ValueText}" />
+                </DockPanel>
+                <ProgressBar Grid.Row="1"
+                             Margin="{StaticResource Rail.TrackTopMargin}"
+                             Value="{Binding AvailablePercent, TargetNullValue=0}"
+                             Foreground="{Binding Color, Converter={StaticResource QuotaBrushConverter}}">
+                    <ProgressBar.Style>
+                        <Style BasedOn="{StaticResource RailProgressBar}"
+                               TargetType="{x:Type ProgressBar}">
+                            <Style.Triggers>
+                                <MultiDataTrigger>
+                                    <MultiDataTrigger.Conditions>
+                                        <Condition Binding="{Binding State}"
+                                                   Value="{x:Static quotas:QuotaWindowState.Exhausted}" />
+                                        <Condition Binding="{Binding DataContext.IsMarqueeActive,
+                                                                     RelativeSource={RelativeSource AncestorType={x:Type local:RailWindow}}}"
+                                                   Value="True" />
+                                    </MultiDataTrigger.Conditions>
+                                    <Setter Property="IsIndeterminate" Value="True" />
+                                </MultiDataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </ProgressBar.Style>
+                </ProgressBar>
+            </Grid>
+        </DataTemplate>
+
+        <DataTemplate x:Key="CompactTrackTemplate">
+            <ProgressBar Margin="{StaticResource Rail.CompactTrackMargin}"
+                         Height="{StaticResource Rail.Height.Compact}"
+                         Value="{Binding AvailablePercent, TargetNullValue=0}"
+                         Foreground="{Binding Color, Converter={StaticResource QuotaBrushConverter}}">
+                <ProgressBar.Style>
+                    <Style BasedOn="{StaticResource RailProgressBar}"
+                           TargetType="{x:Type ProgressBar}">
+                        <Style.Triggers>
+                            <MultiDataTrigger>
+                                <MultiDataTrigger.Conditions>
+                                    <Condition Binding="{Binding State}"
+                                               Value="{x:Static quotas:QuotaWindowState.Exhausted}" />
+                                    <Condition Binding="{Binding DataContext.IsMarqueeActive,
+                                                                 RelativeSource={RelativeSource AncestorType={x:Type local:RailWindow}}}"
+                                               Value="True" />
+                                </MultiDataTrigger.Conditions>
+                                <Setter Property="IsIndeterminate" Value="True" />
+                            </MultiDataTrigger>
+                        </Style.Triggers>
+                    </Style>
+                </ProgressBar.Style>
+            </ProgressBar>
+        </DataTemplate>
+    </Window.Resources>
+
+    <Grid>
+        <Border x:Name="RootBorder"
+                MouseEnter="OnRailMouseEnter"
+                MouseLeave="OnRailMouseLeave">
+            <Border.Style>
+                <Style TargetType="{x:Type Border}">
+                    <Setter Property="Background" Value="{StaticResource Rail.Surface}" />
+                    <Setter Property="BorderBrush" Value="{StaticResource Rail.BorderSubtle}" />
+                    <Setter Property="BorderThickness" Value="1" />
+                    <Setter Property="CornerRadius" Value="{StaticResource Rail.RootCornerRadius}" />
+                    <Style.Triggers>
+                        <DataTrigger Binding="{Binding IsCompact}" Value="True">
+                            <Setter Property="Background" Value="Transparent" />
+                            <Setter Property="BorderThickness" Value="0" />
+                            <Setter Property="CornerRadius" Value="0" />
+                        </DataTrigger>
+                    </Style.Triggers>
+                </Style>
+            </Border.Style>
+            <Grid>
+                <Grid x:Name="ExternalContent"
+                      Margin="{StaticResource Rail.Padding}"
+                      Visibility="{Binding ShowLabels, Converter={StaticResource BooleanToVisibility}}">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Margin="{StaticResource Rail.BrandGap}"
+                               VerticalAlignment="Center"
+                               FontFamily="{StaticResource Rail.Font.Mono}"
+                               FontSize="{StaticResource Rail.FontSize.Label}"
+                               FontWeight="SemiBold"
+                               Foreground="{StaticResource Rail.TextSecondary}"
+                               Text="CODEX"
+                               Visibility="{Binding ShowTrackText, Converter={StaticResource BooleanToVisibility}}" />
+                    <Grid Grid.Column="1">
+                        <ItemsControl ItemsSource="{Binding Tracks}"
+                                      ItemTemplate="{StaticResource ExternalTrackTemplate}">
+                            <ItemsControl.ItemsPanel>
+                                <ItemsPanelTemplate>
+                                    <UniformGrid Rows="1" />
+                                </ItemsPanelTemplate>
+                            </ItemsControl.ItemsPanel>
+                            <ItemsControl.Style>
+                                <Style TargetType="{x:Type ItemsControl}">
+                                    <Setter Property="HorizontalAlignment" Value="Stretch" />
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding HasTracks}" Value="False">
+                                            <Setter Property="Visibility" Value="Collapsed" />
+                                        </DataTrigger>
+                                        <DataTrigger Binding="{Binding HasSingleTrack}" Value="True">
+                                            <Setter Property="MaxWidth" Value="{StaticResource Rail.SingleTrackMaxWidth}" />
+                                            <Setter Property="HorizontalAlignment" Value="Center" />
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </ItemsControl.Style>
+                        </ItemsControl>
+                        <TextBlock HorizontalAlignment="Center"
+                                   VerticalAlignment="Center"
+                                   FontFamily="{StaticResource Rail.Font.Primary}"
+                                   FontSize="{StaticResource Rail.FontSize.Value}"
+                                   FontWeight="SemiBold"
+                                   Foreground="{StaticResource Rail.TextSecondary}"
+                                   Text="{Binding StatusText}">
+                            <TextBlock.Style>
+                                <Style TargetType="{x:Type TextBlock}">
+                                    <Setter Property="Visibility" Value="Visible" />
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding HasTracks}" Value="True">
+                                            <Setter Property="Visibility" Value="Collapsed" />
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </TextBlock.Style>
+                        </TextBlock>
+                    </Grid>
+                </Grid>
+
+                <ItemsControl ItemsSource="{Binding Tracks}"
+                              ItemTemplate="{StaticResource CompactTrackTemplate}">
+                    <ItemsControl.ItemsPanel>
+                        <ItemsPanelTemplate>
+                            <UniformGrid Rows="1" />
+                        </ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
+                    <ItemsControl.Style>
+                        <Style TargetType="{x:Type ItemsControl}">
+                            <Setter Property="Visibility" Value="Collapsed" />
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding IsCompact}" Value="True">
+                                    <Setter Property="Visibility" Value="Visible" />
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </ItemsControl.Style>
+                </ItemsControl>
+
+                <Border x:Name="ShimmerOverlay"
+                        Width="{StaticResource Rail.ShimmerWidth}"
+                        HorizontalAlignment="Left"
+                        Opacity="0"
+                        Background="{StaticResource Rail.Shimmer}"
+                        IsHitTestVisible="False">
+                    <Border.RenderTransform>
+                        <TranslateTransform />
+                    </Border.RenderTransform>
+                </Border>
+            </Grid>
+        </Border>
+
+        <Popup x:Name="DetailsPopup"
+               AllowsTransparency="True"
+               Focusable="False"
+               Placement="Bottom"
+               PlacementTarget="{Binding ElementName=RootBorder}"
+               StaysOpen="False"
+               MouseLeave="OnDetailsMouseLeave">
+            <Border MinWidth="{StaticResource Rail.DetailMinWidth}"
+                    Padding="{StaticResource Rail.DetailPadding}"
+                    Background="{StaticResource Rail.DetailSurface}"
+                    BorderBrush="{StaticResource Rail.BorderSubtle}"
+                    BorderThickness="1"
+                    CornerRadius="{StaticResource Rail.RootCornerRadius}">
+                <StackPanel>
+                    <TextBlock Margin="{StaticResource Rail.DetailTitleMargin}"
+                               FontFamily="{StaticResource Rail.Font.Primary}"
+                               FontSize="{StaticResource Rail.FontSize.DetailTitle}"
+                               FontWeight="SemiBold"
+                               Foreground="{StaticResource Rail.TextPrimary}"
+                               Text="Codex 可用额度" />
+                    <ItemsControl ItemsSource="{Binding Tracks}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <Grid Margin="{StaticResource Rail.DetailRowMargin}">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <StackPanel>
+                                        <TextBlock FontFamily="{StaticResource Rail.Font.Primary}"
+                                                   FontSize="{StaticResource Rail.FontSize.DetailBody}"
+                                                   Foreground="{StaticResource Rail.TextPrimary}"
+                                                   Text="{Binding Label}" />
+                                        <TextBlock FontFamily="{StaticResource Rail.Font.Primary}"
+                                                   FontSize="{StaticResource Rail.FontSize.Metadata}"
+                                                   Foreground="{StaticResource Rail.TextSecondary}"
+                                                   Text="{Binding ResetText}" />
+                                    </StackPanel>
+                                    <TextBlock Grid.Column="1"
+                                               Margin="{StaticResource Rail.DetailValueMargin}"
+                                               VerticalAlignment="Center"
+                                               FontFamily="{StaticResource Rail.Font.Primary}"
+                                               FontSize="{StaticResource Rail.FontSize.DetailBody}"
+                                               FontWeight="SemiBold"
+                                               Foreground="{Binding Color, Converter={StaticResource QuotaBrushConverter}}"
+                                               Text="{Binding ValueText}" />
+                                </Grid>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                    <TextBlock Margin="{StaticResource Rail.DetailFooterMargin}"
+                               FontFamily="{StaticResource Rail.Font.Primary}"
+                               FontSize="{StaticResource Rail.FontSize.Metadata}"
+                               Foreground="{StaticResource Rail.TextSecondary}"
+                               Text="{Binding StatusText}" />
+                </StackPanel>
+            </Border>
+        </Popup>
+    </Grid>
+</Window>
