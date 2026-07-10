@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.ComponentModel;
 using System.Text.Json;
 using CodexQuotaRail.AppServer.Protocol;
 using CodexQuotaRail.AppServer.Transport;
@@ -7,6 +8,15 @@ namespace CodexQuotaRail.AppServer.Tests;
 
 public sealed class JsonRpcConnectionTests
 {
+    private static readonly IReadOnlyList<string> BlockingCleanupArguments =
+    [
+        "-NoProfile",
+        "-NonInteractive",
+        "-Command",
+        "[Console]::Error.WriteLine('cleanup-blocked'); Start-Sleep -Seconds 30",
+    ];
+
+    private static readonly TimeSpan ImmediateFailureTimeout = TimeSpan.FromSeconds(1);
     private static readonly TimeSpan TestTimeout = TimeSpan.FromSeconds(5);
 
     [Fact]
@@ -61,7 +71,99 @@ public sealed class JsonRpcConnectionTests
         var error = await Assert.ThrowsAsync<AppServerRequestException>(
             () => initializeTask.WaitAsync(TestTimeout));
         Assert.Equal(-32000, error.Code);
-        Assert.Equal("初始化失败", error.Message);
+        Assert.Equal("App Server 请求失败。", error.Message);
+        Assert.False(transport.TryReadWrittenLine(out _));
+    }
+
+    [Fact]
+    public async Task PublicRequestBeforeInitializationIsRejectedWithoutWriting()
+    {
+        var transport = new FakeJsonLineTransport();
+        await using var connection = new JsonRpcConnection(transport);
+        await connection.StartAsync(CancellationToken.None);
+        using var cancellation = new CancellationTokenSource(ImmediateFailureTimeout);
+
+        await Assert.ThrowsAsync<InvalidOperationException>(
+            () => connection.RequestAsync("account/read", null, cancellation.Token));
+
+        Assert.False(transport.TryReadWrittenLine(out _));
+    }
+
+    [Fact]
+    public async Task PublicNotificationBeforeInitializationIsRejectedWithoutWriting()
+    {
+        var transport = new FakeJsonLineTransport();
+        await using var connection = new JsonRpcConnection(transport);
+        await connection.StartAsync(CancellationToken.None);
+
+        await Assert.ThrowsAsync<InvalidOperationException>(
+            async () => await connection.NotifyAsync(
+                    "unsafe/notification",
+                    null,
+                    CancellationToken.None)
+                .AsTask()
+                .WaitAsync(ImmediateFailureTimeout));
+
+        Assert.False(transport.TryReadWrittenLine(out _));
+    }
+
+    [Fact]
+    public async Task ConcurrentInitializeIsRejectedWithoutSendingSecondRequest()
+    {
+        var transport = new FakeJsonLineTransport();
+        await using var connection = new JsonRpcConnection(transport);
+        await connection.StartAsync(CancellationToken.None);
+
+        var firstInitialize = connection.InitializeAsync(new Version(0, 1, 0), CancellationToken.None);
+        var firstRequest = ParseRequest(await ReadWrittenLineAsync(transport));
+        using var secondCancellation = new CancellationTokenSource(ImmediateFailureTimeout);
+
+        var secondError = await Record.ExceptionAsync(
+            () => connection.InitializeAsync(new Version(0, 1, 0), secondCancellation.Token));
+        var sentSecondRequest = transport.TryReadWrittenLine(out _);
+
+        transport.QueueIncoming($"{{\"id\":{firstRequest.Id},\"result\":{{}}}}");
+        await firstInitialize.WaitAsync(TestTimeout);
+        _ = await ReadWrittenLineAsync(transport);
+
+        Assert.IsType<InvalidOperationException>(secondError);
+        Assert.False(sentSecondRequest);
+    }
+
+    [Fact]
+    public async Task RepeatedInitializeAfterSuccessIsRejectedWithoutWriting()
+    {
+        var transport = new FakeJsonLineTransport();
+        await using var connection = new JsonRpcConnection(transport);
+        await StartAndInitializeAsync(connection, transport);
+        using var cancellation = new CancellationTokenSource(ImmediateFailureTimeout);
+
+        await Assert.ThrowsAsync<InvalidOperationException>(
+            () => connection.InitializeAsync(new Version(0, 1, 0), cancellation.Token));
+
+        Assert.False(transport.TryReadWrittenLine(out _));
+    }
+
+    [Fact]
+    public async Task InitializeFailureMakesConnectionTerminal()
+    {
+        var transport = new FakeJsonLineTransport();
+        await using var connection = new JsonRpcConnection(transport);
+        await connection.StartAsync(CancellationToken.None);
+
+        var initializeTask = connection.InitializeAsync(new Version(0, 1, 0), CancellationToken.None);
+        var initializeRequest = ParseRequest(await ReadWrittenLineAsync(transport));
+        transport.QueueIncoming(
+            $"{{\"id\":{initializeRequest.Id},\"error\":{{\"code\":-32000,\"message\":\"初始化失败\"}}}}");
+
+        var initializeError = await Assert.ThrowsAsync<AppServerRequestException>(
+            () => initializeTask.WaitAsync(TestTimeout));
+        using var cancellation = new CancellationTokenSource(ImmediateFailureTimeout);
+        var terminalError = await Assert.ThrowsAsync<AppServerProtocolException>(
+            () => connection.RequestAsync("account/read", null, cancellation.Token));
+
+        Assert.Equal(-32000, initializeError.Code);
+        Assert.Equal("App Server 初始化失败，连接不可继续使用。", terminalError.Message);
         Assert.False(transport.TryReadWrittenLine(out _));
     }
 
@@ -70,7 +172,7 @@ public sealed class JsonRpcConnectionTests
     {
         var transport = new FakeJsonLineTransport();
         await using var connection = new JsonRpcConnection(transport);
-        await connection.StartAsync(CancellationToken.None);
+        await StartAndInitializeAsync(connection, transport);
 
         var firstTask = connection.RequestAsync("first/read", new { marker = "first" }, CancellationToken.None);
         var secondTask = connection.RequestAsync("second/read", new { marker = "second" }, CancellationToken.None);
@@ -99,7 +201,7 @@ public sealed class JsonRpcConnectionTests
     {
         var transport = new FakeJsonLineTransport();
         await using var connection = new JsonRpcConnection(transport);
-        await connection.StartAsync(CancellationToken.None);
+        await StartAndInitializeAsync(connection, transport);
         using var cancellation = new CancellationTokenSource();
 
         var cancelledTask = connection.RequestAsync("slow/read", null, cancellation.Token);
@@ -128,7 +230,7 @@ public sealed class JsonRpcConnectionTests
         await using var connection = new JsonRpcConnection(transport);
         var protocolError = NewCompletionSource<AppServerProtocolException>();
         connection.ProtocolError += (_, error) => protocolError.TrySetResult(error);
-        await connection.StartAsync(CancellationToken.None);
+        await StartAndInitializeAsync(connection, transport);
 
         transport.QueueIncoming($"{{\"token\":\"{Secret}\"");
 
@@ -151,7 +253,7 @@ public sealed class JsonRpcConnectionTests
         await using var connection = new JsonRpcConnection(transport);
         var protocolError = NewCompletionSource<AppServerProtocolException>();
         connection.ProtocolError += (_, error) => protocolError.TrySetResult(error);
-        await connection.StartAsync(CancellationToken.None);
+        await StartAndInitializeAsync(connection, transport);
 
         transport.QueueIncoming($"[\"{Secret}\"]");
 
@@ -161,11 +263,11 @@ public sealed class JsonRpcConnectionTests
     }
 
     [Fact]
-    public async Task ServerErrorPreservesCodeAndSafeMessage()
+    public async Task ServerErrorPreservesCodeAndUsesFixedSafeMessage()
     {
         var transport = new FakeJsonLineTransport();
         await using var connection = new JsonRpcConnection(transport);
-        await connection.StartAsync(CancellationToken.None);
+        await StartAndInitializeAsync(connection, transport);
 
         var requestTask = connection.RequestAsync("account/read", null, CancellationToken.None);
         var request = ParseRequest(await ReadWrittenLineAsync(transport));
@@ -175,7 +277,35 @@ public sealed class JsonRpcConnectionTests
         var error = await Assert.ThrowsAsync<AppServerRequestException>(
             () => requestTask.WaitAsync(TestTimeout));
         Assert.Equal(-32602, error.Code);
-        Assert.Equal("请求参数无效", error.Message);
+        Assert.Equal("App Server 请求失败。", error.Message);
+    }
+
+    [Theory]
+    [InlineData(@"C:\Users\Alice\AppData\Local\Codex\private.json")]
+    [InlineData("account_01J9ZY8P4M7K2N6Q3R5T8V0WXY")]
+    [InlineData("eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c")]
+    [InlineData("a9F4c2B7e1D8f6A3c5E0b9D2f7A4e8C1b6D3f0A5c9E2b7D4f1A8c6E3b0D5f9A2")]
+    public async Task ServerErrorNeverReturnsUnapprovedMessage(string serverMessage)
+    {
+        var transport = new FakeJsonLineTransport();
+        await using var connection = new JsonRpcConnection(transport);
+        await StartAndInitializeAsync(connection, transport);
+
+        var requestTask = connection.RequestAsync("account/read", null, CancellationToken.None);
+        var request = ParseRequest(await ReadWrittenLineAsync(transport));
+        transport.QueueIncoming(
+            JsonSerializer.Serialize(
+                new
+                {
+                    id = request.Id,
+                    error = new { code = 500, message = serverMessage },
+                }));
+
+        var error = await Assert.ThrowsAsync<AppServerRequestException>(
+            () => requestTask.WaitAsync(TestTimeout));
+        Assert.Equal(500, error.Code);
+        Assert.Equal("App Server 请求失败。", error.Message);
+        Assert.DoesNotContain(serverMessage, error.ToString(), StringComparison.Ordinal);
     }
 
     [Fact]
@@ -184,7 +314,7 @@ public sealed class JsonRpcConnectionTests
         const string Secret = "sk-private-token-value";
         var transport = new FakeJsonLineTransport();
         await using var connection = new JsonRpcConnection(transport);
-        await connection.StartAsync(CancellationToken.None);
+        await StartAndInitializeAsync(connection, transport);
 
         var requestTask = connection.RequestAsync("account/read", null, CancellationToken.None);
         var request = ParseRequest(await ReadWrittenLineAsync(transport));
@@ -206,7 +336,7 @@ public sealed class JsonRpcConnectionTests
         var notificationReceived = NewCompletionSource<JsonRpcNotification>();
         connection.NotificationReceived += (_, notification) =>
             notificationReceived.TrySetResult(notification);
-        await connection.StartAsync(CancellationToken.None);
+        await StartAndInitializeAsync(connection, transport);
         await transport.WaitUntilReadingAsync(CancellationToken.None).WaitAsync(TestTimeout);
 
         transport.QueueIncoming(
@@ -233,11 +363,57 @@ public sealed class JsonRpcConnectionTests
     }
 
     [Fact]
+    public async Task RequestAfterEndOfStreamFailsImmediatelyWithTerminalError()
+    {
+        var transport = new FakeJsonLineTransport();
+        await using var connection = new JsonRpcConnection(transport);
+        var protocolError = NewCompletionSource<AppServerProtocolException>();
+        connection.ProtocolError += (_, error) => protocolError.TrySetResult(error);
+        await StartAndInitializeAsync(connection, transport);
+
+        transport.CompleteIncoming();
+        var terminalError = await protocolError.Task.WaitAsync(TestTimeout);
+
+        var requestError = await Assert.ThrowsAsync<AppServerProtocolException>(
+            () => connection.RequestAsync("after-eof/read", null, CancellationToken.None)
+                .WaitAsync(ImmediateFailureTimeout));
+        Assert.Equal("App Server 连接已关闭。", terminalError.Message);
+        Assert.Equal(terminalError.Message, requestError.Message);
+        Assert.False(transport.TryReadWrittenLine(out _));
+    }
+
+    [Fact]
+    public async Task NotifyAfterReadFailureFailsImmediatelyWithSanitizedTerminalError()
+    {
+        const string Secret = "Bearer read-loop-secret";
+        var transport = new FakeJsonLineTransport();
+        await using var connection = new JsonRpcConnection(transport);
+        var protocolError = NewCompletionSource<AppServerProtocolException>();
+        connection.ProtocolError += (_, error) => protocolError.TrySetResult(error);
+        await StartAndInitializeAsync(connection, transport);
+
+        transport.CompleteIncoming(new IOException(Secret));
+        var terminalError = await protocolError.Task.WaitAsync(TestTimeout);
+
+        var notifyError = await Assert.ThrowsAsync<AppServerProtocolException>(
+            async () => await connection.NotifyAsync(
+                    "after-failure",
+                    null,
+                    CancellationToken.None)
+                .AsTask()
+                .WaitAsync(ImmediateFailureTimeout));
+        Assert.Equal("读取 App Server 消息失败。", terminalError.Message);
+        Assert.Equal(terminalError.Message, notifyError.Message);
+        Assert.DoesNotContain(Secret, notifyError.Message, StringComparison.Ordinal);
+        Assert.False(transport.TryReadWrittenLine(out _));
+    }
+
+    [Fact]
     public async Task DisposeFailsPendingRequestsAndDisposesTransportOnce()
     {
         var transport = new FakeJsonLineTransport();
         var connection = new JsonRpcConnection(transport);
-        await connection.StartAsync(CancellationToken.None);
+        await StartAndInitializeAsync(connection, transport);
 
         var pendingTask = connection.RequestAsync("never/responds", null, CancellationToken.None);
         _ = await ReadWrittenLineAsync(transport);
@@ -249,6 +425,72 @@ public sealed class JsonRpcConnectionTests
             () => pendingTask.WaitAsync(TestTimeout));
         await Assert.ThrowsAsync<ObjectDisposedException>(
             () => connection.RequestAsync("after/dispose", null, CancellationToken.None));
+        Assert.Equal(1, transport.DisposeCount);
+    }
+
+    [Fact]
+    public async Task ConcurrentDisposeCallsWaitForSharedCleanupTask()
+    {
+        var transport = new FakeJsonLineTransport { PauseDispose = true };
+        var connection = new JsonRpcConnection(transport);
+        await connection.StartAsync(CancellationToken.None);
+
+        var firstDispose = connection.DisposeAsync().AsTask();
+        await transport.WaitUntilDisposeStartsAsync(CancellationToken.None).WaitAsync(TestTimeout);
+        var secondDispose = connection.DisposeAsync().AsTask();
+        var firstCompletedEarly = firstDispose.IsCompleted;
+        var secondCompletedEarly = secondDispose.IsCompleted;
+
+        transport.ReleaseDispose();
+        await Task.WhenAll(firstDispose, secondDispose).WaitAsync(TestTimeout);
+
+        Assert.False(firstCompletedEarly);
+        Assert.False(secondCompletedEarly);
+        Assert.Equal(1, transport.DisposeCount);
+    }
+
+    [Fact]
+    public async Task DisposeWrapsWin32FailureAndAllCallersObserveSameSafeError()
+    {
+        const string Secret = @"C:\Users\Alice\AppData\Local\account-123456789";
+        var transport = new FakeJsonLineTransport
+        {
+            DisposeException = new Win32Exception(Secret),
+        };
+        var connection = new JsonRpcConnection(transport);
+        await connection.StartAsync(CancellationToken.None);
+
+        var firstError = await Record.ExceptionAsync(
+            async () => await connection.DisposeAsync());
+        var secondError = await Record.ExceptionAsync(
+            async () => await connection.DisposeAsync());
+
+        var firstProtocolError = Assert.IsType<AppServerProtocolException>(firstError);
+        var secondProtocolError = Assert.IsType<AppServerProtocolException>(secondError);
+        Assert.Same(firstProtocolError, secondProtocolError);
+        Assert.Equal("清理 App Server 连接失败。", firstProtocolError.Message);
+        Assert.DoesNotContain(Secret, firstProtocolError.ToString(), StringComparison.Ordinal);
+        Assert.Equal(1, transport.DisposeCount);
+    }
+
+    [Fact]
+    public async Task DisposeWaitsForInFlightStartAndDoesNotPublishReader()
+    {
+        var transport = new FakeJsonLineTransport { PauseStart = true };
+        var connection = new JsonRpcConnection(transport);
+
+        var startTask = connection.StartAsync(CancellationToken.None);
+        await transport.WaitUntilStartEntersAsync(CancellationToken.None).WaitAsync(TestTimeout);
+        var disposeTask = connection.DisposeAsync().AsTask();
+        var disposeCompletedBeforeStart = disposeTask.IsCompleted;
+
+        transport.ReleaseStart();
+        var startError = await Record.ExceptionAsync(() => startTask);
+        await disposeTask.WaitAsync(TestTimeout);
+
+        Assert.False(disposeCompletedBeforeStart);
+        Assert.IsType<ObjectDisposedException>(startError);
+        Assert.Equal(0, transport.ReadCount);
         Assert.Equal(1, transport.DisposeCount);
     }
 
@@ -290,8 +532,76 @@ public sealed class JsonRpcConnectionTests
         Assert.DoesNotContain(SecretStderr, diagnostic.ToString(), StringComparison.Ordinal);
     }
 
+    [Fact]
+    public async Task ProcessTransportConcurrentDisposeCallsWaitForSameCleanup()
+    {
+        using var releaseDiagnostic = new ManualResetEventSlim();
+        var diagnosticEntered = NewCompletionSource();
+        var launchSpec = new ProcessLaunchSpec(
+            "powershell.exe",
+            BlockingCleanupArguments);
+        var transport = new ProcessJsonLineTransport(
+            launchSpec,
+            _ =>
+            {
+                diagnosticEntered.TrySetResult();
+                releaseDiagnostic.Wait();
+            });
+        using var timeout = new CancellationTokenSource(TestTimeout);
+        Task? firstDispose = null;
+        Task? secondDispose = null;
+
+        try
+        {
+            await transport.StartAsync(timeout.Token);
+            await diagnosticEntered.Task.WaitAsync(TestTimeout);
+
+            firstDispose = transport.DisposeAsync().AsTask();
+            secondDispose = transport.DisposeAsync().AsTask();
+            var secondCompletedEarly = secondDispose.IsCompleted;
+
+            releaseDiagnostic.Set();
+            await Task.WhenAll(firstDispose, secondDispose).WaitAsync(TestTimeout);
+
+            Assert.False(secondCompletedEarly);
+        }
+        finally
+        {
+            releaseDiagnostic.Set();
+            if (firstDispose is not null)
+            {
+                await firstDispose.WaitAsync(TestTimeout);
+            }
+
+            if (secondDispose is not null)
+            {
+                await secondDispose.WaitAsync(TestTimeout);
+            }
+
+            await transport.DisposeAsync();
+        }
+    }
+
     private static TaskCompletionSource<T> NewCompletionSource<T>() =>
         new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+    private static TaskCompletionSource NewCompletionSource() =>
+        new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+    private static async Task StartAndInitializeAsync(
+        JsonRpcConnection connection,
+        FakeJsonLineTransport transport)
+    {
+        await connection.StartAsync(CancellationToken.None);
+        var initializeTask = connection.InitializeAsync(new Version(0, 1, 0), CancellationToken.None);
+        var request = ParseRequest(await ReadWrittenLineAsync(transport));
+        Assert.Equal("initialize", request.Method);
+        transport.QueueIncoming($"{{\"id\":{request.Id},\"result\":{{}}}}");
+        await initializeTask.WaitAsync(TestTimeout);
+
+        using var initialized = JsonDocument.Parse(await ReadWrittenLineAsync(transport));
+        Assert.Equal("initialized", initialized.RootElement.GetProperty("method").GetString());
+    }
 
     private static async Task<string> ReadWrittenLineAsync(FakeJsonLineTransport transport)
     {

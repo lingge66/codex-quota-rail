@@ -8,7 +8,15 @@ internal sealed class FakeJsonLineTransport : IJsonLineTransport
 {
     private readonly Channel<string> _incoming = Channel.CreateUnbounded<string>();
     private readonly Channel<string> _outgoing = Channel.CreateUnbounded<string>();
+    private readonly TaskCompletionSource _disposeStarted =
+        new(TaskCreationOptions.RunContinuationsAsynchronously);
+    private readonly TaskCompletionSource _releaseDispose =
+        new(TaskCreationOptions.RunContinuationsAsynchronously);
+    private readonly TaskCompletionSource _releaseStart =
+        new(TaskCreationOptions.RunContinuationsAsynchronously);
     private readonly TaskCompletionSource _readerStarted =
+        new(TaskCreationOptions.RunContinuationsAsynchronously);
+    private readonly TaskCompletionSource _startEntered =
         new(TaskCreationOptions.RunContinuationsAsynchronously);
     private int _disposeCount;
     private int _readCount;
@@ -20,11 +28,21 @@ internal sealed class FakeJsonLineTransport : IJsonLineTransport
 
     public int StartCount => Volatile.Read(ref _startCount);
 
-    public Task StartAsync(CancellationToken cancellationToken)
+    public Exception? DisposeException { get; init; }
+
+    public bool PauseDispose { get; init; }
+
+    public bool PauseStart { get; init; }
+
+    public async Task StartAsync(CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
         Interlocked.Increment(ref _startCount);
-        return Task.CompletedTask;
+        _startEntered.TrySetResult();
+        if (PauseStart)
+        {
+            await _releaseStart.Task.WaitAsync(cancellationToken);
+        }
     }
 
     public ValueTask WriteLineAsync(string line, CancellationToken cancellationToken) =>
@@ -50,6 +68,9 @@ internal sealed class FakeJsonLineTransport : IJsonLineTransport
         }
     }
 
+    public void CompleteIncoming(Exception? error = null) =>
+        _incoming.Writer.TryComplete(error);
+
     public ValueTask<string> ReadWrittenLineAsync(CancellationToken cancellationToken) =>
         _outgoing.Reader.ReadAsync(cancellationToken);
 
@@ -58,14 +79,32 @@ internal sealed class FakeJsonLineTransport : IJsonLineTransport
     public Task WaitUntilReadingAsync(CancellationToken cancellationToken) =>
         _readerStarted.Task.WaitAsync(cancellationToken);
 
-    public ValueTask DisposeAsync()
+    public Task WaitUntilDisposeStartsAsync(CancellationToken cancellationToken) =>
+        _disposeStarted.Task.WaitAsync(cancellationToken);
+
+    public Task WaitUntilStartEntersAsync(CancellationToken cancellationToken) =>
+        _startEntered.Task.WaitAsync(cancellationToken);
+
+    public void ReleaseDispose() => _releaseDispose.TrySetResult();
+
+    public void ReleaseStart() => _releaseStart.TrySetResult();
+
+    public async ValueTask DisposeAsync()
     {
         if (Interlocked.Increment(ref _disposeCount) == 1)
         {
             _incoming.Writer.TryComplete();
             _outgoing.Writer.TryComplete();
-        }
+            _disposeStarted.TrySetResult();
+            if (PauseDispose)
+            {
+                await _releaseDispose.Task;
+            }
 
-        return ValueTask.CompletedTask;
+            if (DisposeException is not null)
+            {
+                throw DisposeException;
+            }
+        }
     }
 }

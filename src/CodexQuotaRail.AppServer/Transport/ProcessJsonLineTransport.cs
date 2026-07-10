@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Runtime.CompilerServices;
+using CodexQuotaRail.AppServer.Protocol;
 
 namespace CodexQuotaRail.AppServer.Transport;
 
@@ -14,7 +15,7 @@ public sealed class ProcessJsonLineTransport : IJsonLineTransport
     private readonly CancellationTokenSource _lifetimeCancellation = new();
     private readonly object _stateLock = new();
     private readonly SemaphoreSlim _writeGate = new(1, 1);
-    private int _disposeState;
+    private Task? _disposeTask;
     private Process? _process;
     private int _readState;
     private Task? _stderrTask;
@@ -126,15 +127,18 @@ public sealed class ProcessJsonLineTransport : IJsonLineTransport
         }
     }
 
-    public async ValueTask DisposeAsync()
+    public ValueTask DisposeAsync()
     {
-        if (Interlocked.Exchange(ref _disposeState, 1) != 0)
+        lock (_stateLock)
         {
-            return;
+            _disposeTask ??= DisposeCoreAsync();
+            return new ValueTask(_disposeTask);
         }
+    }
 
-        _lifetimeCancellation.Cancel();
-
+    private async Task DisposeCoreAsync()
+    {
+        var cleanupFailed = false;
         Process? process;
         Task? stderrTask;
         lock (_stateLock)
@@ -145,49 +149,96 @@ public sealed class ProcessJsonLineTransport : IJsonLineTransport
             _stderrTask = null;
         }
 
-        if (process is not null)
+        try
         {
             try
             {
-                process.StandardInput.Close();
+                _lifetimeCancellation.Cancel();
             }
-            catch (InvalidOperationException)
+            catch
             {
+                cleanupFailed = true;
             }
 
-            try
+            if (process is not null)
             {
-                if (!process.HasExited)
+                try
                 {
-                    process.Kill(entireProcessTree: true);
+                    process.StandardInput.Close();
+                }
+                catch
+                {
+                    cleanupFailed = true;
+                }
+
+                var shouldWaitForExit = false;
+                try
+                {
+                    if (!process.HasExited)
+                    {
+                        process.Kill(entireProcessTree: true);
+                    }
+
+                    shouldWaitForExit = true;
+                }
+                catch
+                {
+                    cleanupFailed = true;
+                }
+
+                if (shouldWaitForExit)
+                {
+                    try
+                    {
+                        await process.WaitForExitAsync(CancellationToken.None).ConfigureAwait(false);
+                    }
+                    catch
+                    {
+                        cleanupFailed = true;
+                    }
                 }
             }
-            catch (InvalidOperationException)
-            {
-            }
 
-            try
+            if (stderrTask is not null)
             {
-                await process.WaitForExitAsync(CancellationToken.None).ConfigureAwait(false);
-            }
-            catch (InvalidOperationException)
-            {
+                try
+                {
+                    await stderrTask.ConfigureAwait(false);
+                }
+                catch (OperationCanceledException) when (_lifetimeCancellation.IsCancellationRequested)
+                {
+                }
+                catch
+                {
+                    cleanupFailed = true;
+                }
             }
         }
-
-        if (stderrTask is not null)
+        finally
         {
             try
             {
-                await stderrTask.ConfigureAwait(false);
+                process?.Dispose();
             }
-            catch (OperationCanceledException) when (_lifetimeCancellation.IsCancellationRequested)
+            catch
             {
+                cleanupFailed = true;
+            }
+
+            try
+            {
+                _lifetimeCancellation.Dispose();
+            }
+            catch
+            {
+                cleanupFailed = true;
             }
         }
 
-        process?.Dispose();
-        _lifetimeCancellation.Dispose();
+        if (cleanupFailed)
+        {
+            throw new AppServerProtocolException("清理 App Server 进程失败。");
+        }
     }
 
     private async Task DrainStandardErrorAsync(
@@ -240,8 +291,6 @@ public sealed class ProcessJsonLineTransport : IJsonLineTransport
 
     private void ThrowIfDisposed()
     {
-        ObjectDisposedException.ThrowIf(
-            Volatile.Read(ref _disposeState) != 0,
-            this);
+        ObjectDisposedException.ThrowIf(Volatile.Read(ref _disposeTask) is not null, this);
     }
 }
