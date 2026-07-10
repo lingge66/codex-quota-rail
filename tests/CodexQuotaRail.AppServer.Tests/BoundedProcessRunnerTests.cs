@@ -76,6 +76,10 @@ public sealed class BoundedProcessRunnerTests
         Assert.True(result.TimedOut);
         Assert.False(result.Exited);
         Assert.Equal(1, process.KillCount);
+        Assert.False(process.IsDisposed);
+
+        process.ReleaseExit();
+        await process.Disposed.Task.WaitAsync(TimeSpan.FromSeconds(2));
         Assert.True(process.IsDisposed);
     }
 
@@ -84,7 +88,7 @@ public sealed class BoundedProcessRunnerTests
     {
         // Given
         var time = new ManualTimeProvider();
-        var process = FakeBoundedProcess.Starting();
+        var process = FakeBoundedProcess.Starting(completeWhenKilled: true);
         var runner = new BoundedProcessRunner(new SingleProcessFactory(process), time);
         var run = Task.Run(() => runner.Run(NewStartInfo(), MainTimeout));
         await process.Started.Task.WaitAsync(TimeSpan.FromSeconds(2));
@@ -109,9 +113,10 @@ public sealed class BoundedProcessRunnerTests
         var result = await run.WaitAsync(TimeSpan.FromSeconds(2));
 
         // Then
-        Assert.True(killObserved);
+        Assert.False(killObserved);
         Assert.True(runCompleted);
         Assert.True(result.TimedOut);
+        await process.Disposed.Task.WaitAsync(TimeSpan.FromSeconds(2));
         Assert.True(process.IsDisposed);
     }
 
@@ -120,7 +125,7 @@ public sealed class BoundedProcessRunnerTests
     {
         // Given
         var time = new ManualTimeProvider();
-        var process = FakeBoundedProcess.Killing();
+        var process = FakeBoundedProcess.Killing(completeWhenKilled: true);
         var runner = new BoundedProcessRunner(new SingleProcessFactory(process), time);
         var run = Task.Run(() => runner.Run(NewStartInfo(), MainTimeout));
         await process.Started.Task.WaitAsync(TimeSpan.FromSeconds(2));
@@ -143,11 +148,83 @@ public sealed class BoundedProcessRunnerTests
         await advanceMainDeadline.WaitAsync(TimeSpan.FromSeconds(2));
         await process.KillCompleted.Task.WaitAsync(TimeSpan.FromSeconds(2));
         var result = await run.WaitAsync(TimeSpan.FromSeconds(2));
+        await process.Disposed.Task.WaitAsync(TimeSpan.FromSeconds(2));
 
         // Then
         Assert.True(runCompleted);
         Assert.True(result.TimedOut);
         Assert.True(process.IsDisposed);
+    }
+
+    [Fact]
+    public async Task RunKeepsRepeatedCallsBoundedWhileStartRemainsBlocked()
+    {
+        // Given
+        var time = new ManualTimeProvider();
+        var blocked = FakeBoundedProcess.Starting(completeWhenKilled: true);
+        var factory = new CountingProcessFactory(
+            blocked,
+            static () => FakeBoundedProcess.Exited(string.Empty, string.Empty));
+        var runner = new BoundedProcessRunner(factory, time);
+        var firstRun = Task.Run(() => runner.Run(NewStartInfo(), MainTimeout));
+        await blocked.Started.Task.WaitAsync(TimeSpan.FromSeconds(2));
+        time.Advance(MainTimeout);
+        if (!await CompletesSoonAsync(firstRun))
+        {
+            time.Advance(BoundedProcessRunner.KillGrace);
+        }
+
+        await firstRun.WaitAsync(TimeSpan.FromSeconds(2));
+
+        // When
+        var retries = Enumerable.Range(0, 8)
+            .Select(_ => runner.Run(NewStartInfo(), MainTimeout))
+            .ToArray();
+
+        // Then
+        Assert.All(retries, static result => Assert.False(result.Succeeded));
+        Assert.Equal(1, factory.CreateCount);
+        Assert.False(blocked.IsDisposed);
+
+        blocked.ReleaseStart();
+        await blocked.Disposed.Task.WaitAsync(TimeSpan.FromSeconds(2));
+        var recovered = runner.Run(NewStartInfo(), MainTimeout);
+        Assert.True(recovered.Succeeded);
+        Assert.Equal(2, factory.CreateCount);
+    }
+
+    [Fact]
+    public async Task RunKeepsRepeatedCallsBoundedWhileKillRemainsBlocked()
+    {
+        // Given
+        var time = new ManualTimeProvider();
+        var blocked = FakeBoundedProcess.Killing(completeWhenKilled: true);
+        var factory = new CountingProcessFactory(
+            blocked,
+            static () => FakeBoundedProcess.Exited(string.Empty, string.Empty));
+        var runner = new BoundedProcessRunner(factory, time);
+        var firstRun = Task.Run(() => runner.Run(NewStartInfo(), MainTimeout));
+        await blocked.Started.Task.WaitAsync(TimeSpan.FromSeconds(2));
+        time.Advance(MainTimeout);
+        await blocked.Killed.Task.WaitAsync(TimeSpan.FromSeconds(2));
+        time.Advance(BoundedProcessRunner.KillGrace);
+        await firstRun.WaitAsync(TimeSpan.FromSeconds(2));
+
+        // When
+        var retries = Enumerable.Range(0, 8)
+            .Select(_ => runner.Run(NewStartInfo(), MainTimeout))
+            .ToArray();
+
+        // Then
+        Assert.All(retries, static result => Assert.False(result.Succeeded));
+        Assert.Equal(1, factory.CreateCount);
+        Assert.False(blocked.IsDisposed);
+
+        blocked.ReleaseKill();
+        await blocked.Disposed.Task.WaitAsync(TimeSpan.FromSeconds(2));
+        var recovered = runner.Run(NewStartInfo(), MainTimeout);
+        Assert.True(recovered.Succeeded);
+        Assert.Equal(2, factory.CreateCount);
     }
 
     private static ProcessStartInfo NewStartInfo() => new()

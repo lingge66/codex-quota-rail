@@ -9,6 +9,22 @@ internal sealed class SingleProcessFactory(FakeBoundedProcess process)
     public IBoundedProcess Create(ProcessStartInfo startInfo) => process;
 }
 
+internal sealed class CountingProcessFactory(
+    FakeBoundedProcess first,
+    Func<FakeBoundedProcess> subsequent)
+    : IBoundedProcessFactory
+{
+    private int _createCount;
+
+    public int CreateCount => Volatile.Read(ref _createCount);
+
+    public IBoundedProcess Create(ProcessStartInfo startInfo)
+    {
+        var count = Interlocked.Increment(ref _createCount);
+        return count == 1 ? first : subsequent();
+    }
+}
+
 internal sealed class FakeBoundedProcess : IBoundedProcess
 {
     private readonly bool _completeWhenKilled;
@@ -47,6 +63,8 @@ internal sealed class FakeBoundedProcess : IBoundedProcess
 
     public TaskCompletionSource KillCompleted { get; } = NewSignal();
 
+    public TaskCompletionSource Disposed { get; } = NewSignal();
+
     public TextReader StandardOutput => _output;
 
     public TextReader StandardError => _error;
@@ -67,20 +85,20 @@ internal sealed class FakeBoundedProcess : IBoundedProcess
     public static FakeBoundedProcess Running(bool completeWhenKilled) =>
         new(string.Empty, string.Empty, exited: false, completeWhenKilled);
 
-    public static FakeBoundedProcess Starting() =>
+    public static FakeBoundedProcess Starting(bool completeWhenKilled = false) =>
         new(
             string.Empty,
             string.Empty,
             exited: false,
-            completeWhenKilled: false,
+            completeWhenKilled,
             startWaitsForRelease: true);
 
-    public static FakeBoundedProcess Killing() =>
+    public static FakeBoundedProcess Killing(bool completeWhenKilled = false) =>
         new(
             string.Empty,
             string.Empty,
             exited: false,
-            completeWhenKilled: false,
+            completeWhenKilled,
             killWaitsForRelease: true);
 
     public bool Start()
@@ -98,6 +116,8 @@ internal sealed class FakeBoundedProcess : IBoundedProcess
     public void ReleaseStart() => _startRelease.TrySetResult();
 
     public void ReleaseKill() => _killRelease.TrySetResult();
+
+    public void ReleaseExit() => _exit.TrySetResult();
 
     public Task WaitForExitAsync() => _exit.Task;
 
@@ -123,6 +143,7 @@ internal sealed class FakeBoundedProcess : IBoundedProcess
         IsDisposed = true;
         _output.Dispose();
         _error.Dispose();
+        Disposed.TrySetResult();
     }
 
     private static TaskCompletionSource NewSignal() =>

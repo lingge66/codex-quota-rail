@@ -3,13 +3,14 @@ using System.Text;
 
 namespace CodexQuotaRail.AppServer.Discovery;
 
-internal sealed class BoundedProcessRunner : IBoundedProcessRunner
+internal sealed partial class BoundedProcessRunner : IBoundedProcessRunner
 {
     internal const int OutputCharacterLimit = 8 * 1024;
     internal static readonly TimeSpan KillGrace = TimeSpan.FromMilliseconds(250);
     private static readonly BoundedText EmptyText = new(string.Empty, Truncated: false);
     private readonly IBoundedProcessFactory _factory;
     private readonly TimeProvider _timeProvider;
+    private int _operationState;
 
     public BoundedProcessRunner(
         IBoundedProcessFactory? factory = null,
@@ -31,6 +32,17 @@ internal sealed class BoundedProcessRunner : IBoundedProcessRunner
         ProcessStartInfo startInfo,
         TimeSpan timeout)
     {
+        if (Interlocked.CompareExchange(ref _operationState, 1, 0) != 0)
+        {
+            return CreateResult(
+                started: false,
+                exited: false,
+                timedOut: true,
+                exitCode: null,
+                outputTask: null,
+                errorTask: null);
+        }
+
         IBoundedProcess? process = null;
         Task<bool>? startTask = null;
         Task? killTask = null;
@@ -40,22 +52,13 @@ internal sealed class BoundedProcessRunner : IBoundedProcessRunner
         var started = false;
         var exited = false;
         var timedOut = false;
+        var cleanupTransferred = false;
         int? exitCode = null;
         try
         {
             using var deadline = new CancellationTokenSource(timeout, _timeProvider);
             process = _factory.Create(startInfo);
-            startTask = Task.Run(
-                () =>
-                {
-                    var didStart = process.Start();
-                    if (didStart && deadline.IsCancellationRequested)
-                    {
-                        TryKill(process);
-                    }
-
-                    return didStart;
-                });
+            startTask = Task.Run(process.Start);
             try
             {
                 started = await startTask.WaitAsync(deadline.Token).ConfigureAwait(false);
@@ -63,21 +66,8 @@ internal sealed class BoundedProcessRunner : IBoundedProcessRunner
             catch (OperationCanceledException) when (deadline.IsCancellationRequested)
             {
                 timedOut = true;
-                using var killDeadline = new CancellationTokenSource(KillGrace, _timeProvider);
-                killTask = Task.Run(() => TryKill(process));
-                try
-                {
-                    await Task.WhenAll(startTask, killTask)
-                        .WaitAsync(killDeadline.Token)
-                        .ConfigureAwait(false);
-                }
-                catch (OperationCanceledException) when (killDeadline.IsCancellationRequested)
-                {
-                }
-                catch
-                {
-                }
-
+                cleanupTransferred = true;
+                Observe(CleanupAfterLateStartAsync(process, startTask));
                 return CreateResult(started, exited, timedOut, exitCode, null, null);
             }
 
@@ -109,6 +99,8 @@ internal sealed class BoundedProcessRunner : IBoundedProcessRunner
                 }
                 catch (OperationCanceledException) when (killDeadline.IsCancellationRequested)
                 {
+                    cleanupTransferred = true;
+                    Observe(CleanupAfterTimeoutAsync(process, completion, killTask));
                 }
                 catch
                 {
@@ -138,7 +130,12 @@ internal sealed class BoundedProcessRunner : IBoundedProcessRunner
         }
         finally
         {
-            TryDispose(process);
+            if (!cleanupTransferred)
+            {
+                TryDispose(process);
+                ReleaseOperation();
+            }
+
             Observe(startTask);
             Observe(killTask);
             Observe(exitTask);
@@ -199,48 +196,6 @@ internal sealed class BoundedProcessRunner : IBoundedProcessRunner
         }
 
         return task.Result;
-    }
-
-    private static void TryKill(IBoundedProcess process)
-    {
-        try
-        {
-            process.Kill();
-        }
-        catch
-        {
-        }
-    }
-
-    private static void TryDispose(IBoundedProcess? process)
-    {
-        try
-        {
-            process?.Dispose();
-        }
-        catch
-        {
-        }
-    }
-
-    private static void Observe(Task? task)
-    {
-        if (task is null || task.IsCompletedSuccessfully || task.IsCanceled)
-        {
-            return;
-        }
-
-        if (task.IsFaulted)
-        {
-            _ = task.Exception;
-            return;
-        }
-
-        _ = task.ContinueWith(
-            static completed => _ = completed.Exception,
-            CancellationToken.None,
-            TaskContinuationOptions.OnlyOnFaulted | TaskContinuationOptions.ExecuteSynchronously,
-            TaskScheduler.Default);
     }
 
     private sealed record BoundedText(string Value, bool Truncated);
