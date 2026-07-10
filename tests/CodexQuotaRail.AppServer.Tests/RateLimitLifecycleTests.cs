@@ -148,6 +148,62 @@ public sealed class RateLimitLifecycleTests
         }
     }
 
+    [Fact]
+    public async Task DisposeCannotPassQueuedRefreshBeforeSignalRelease()
+    {
+        // Given
+        var fixture = SourceFixture.Create();
+        var releaseSignal = NewSignal();
+        Task? dispose = null;
+        try
+        {
+            await fixture.Source.StartAsync(fixture.CancellationToken);
+            var queued = NewSignal();
+            fixture.Source.BeforeRefreshSignalRelease = () =>
+            {
+                queued.TrySetResult();
+                releaseSignal.Task.GetAwaiter().GetResult();
+            };
+            var refresh = Task.Run(
+                () => fixture.Source.RefreshAsync(fixture.CancellationToken),
+                fixture.CancellationToken);
+            await queued.Task.WaitAsync(fixture.CancellationToken);
+
+            // When
+            dispose = Task.Run(
+                async () => await fixture.Source.DisposeAsync(),
+                fixture.CancellationToken);
+            var disposePassedBarrier = await CompletesSoonAsync(dispose);
+            releaseSignal.TrySetResult();
+            var refreshError = await Record.ExceptionAsync(
+                () => refresh.WaitAsync(fixture.CancellationToken));
+            await dispose.WaitAsync(fixture.CancellationToken);
+
+            // Then
+            Assert.False(disposePassedBarrier);
+            Assert.True(
+                refreshError is null or ObjectDisposedException,
+                "已安全 Release 的刷新只能成功或由 Dispose 终止。");
+            Assert.Equal(0, fixture.Source.PendingWaiterCount);
+            Assert.True(fixture.Connection.IsDisposed);
+        }
+        finally
+        {
+            releaseSignal.TrySetResult();
+            if (dispose is not null)
+            {
+                await Record.ExceptionAsync(() => dispose);
+            }
+
+            await fixture.DisposeAsync();
+        }
+    }
+
     private static TaskCompletionSource NewSignal() =>
         new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+    private static async Task<bool> CompletesSoonAsync(Task task) =>
+        ReferenceEquals(
+            task,
+            await Task.WhenAny(task, Task.Delay(TimeSpan.FromMilliseconds(250))));
 }

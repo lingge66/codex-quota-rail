@@ -52,6 +52,8 @@ public sealed partial class RateLimitSource : IRateLimitSource
 
     public long DroppedCallbackCount => _callbackDispatcher.DroppedCount;
 
+    internal Action? BeforeRefreshSignalRelease { get; set; }
+
     public Task StartAsync(CancellationToken cancellationToken)
     {
         lock (_sync)
@@ -79,7 +81,6 @@ public sealed partial class RateLimitSource : IRateLimitSource
         var completion = new TaskCompletionSource(
             TaskCreationOptions.RunContinuationsAsynchronously);
         CancellationTokenRegistration registration;
-        var release = false;
         lock (_sync)
         {
             EnsureRefreshCanBeQueuedLocked();
@@ -96,12 +97,10 @@ public sealed partial class RateLimitSource : IRateLimitSource
                     id,
                     completion,
                     cancellationToken));
-            release = QueueRefreshLocked();
-        }
-
-        if (release)
-        {
-            _refreshSignal.Release();
+            if (QueueRefreshLocked())
+            {
+                ReleaseRefreshSignalLocked();
+            }
         }
 
         return AwaitWaiterAsync(completion.Task, registration);
@@ -134,17 +133,20 @@ public sealed partial class RateLimitSource : IRateLimitSource
 
     private void QueueRefresh()
     {
-        var release = false;
         lock (_sync)
         {
             EnsureRefreshCanBeQueuedLocked();
-            release = QueueRefreshLocked();
+            if (QueueRefreshLocked())
+            {
+                ReleaseRefreshSignalLocked();
+            }
         }
+    }
 
-        if (release)
-        {
-            _refreshSignal.Release();
-        }
+    private void ReleaseRefreshSignalLocked()
+    {
+        BeforeRefreshSignalRelease?.Invoke();
+        _refreshSignal.Release();
     }
 
     private bool QueueRefreshLocked()
