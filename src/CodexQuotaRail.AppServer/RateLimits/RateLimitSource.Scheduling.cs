@@ -2,60 +2,27 @@ namespace CodexQuotaRail.AppServer.RateLimits;
 
 public sealed partial class RateLimitSource
 {
-    private void ScheduleRefresh(TimeSpan delay)
+    private async Task ScheduleRefreshAsync(TimeSpan delay)
     {
-        if (_dependencies.Availability.IsPaused ||
-            _lifetimeCancellation.IsCancellationRequested)
-        {
-            return;
-        }
-
-        var scheduled = CancellationTokenSource.CreateLinkedTokenSource(
-            _lifetimeCancellation.Token);
-        CancellationTokenSource? previous;
+        await StopScheduledRefreshAsync().ConfigureAwait(false);
         lock (_sync)
         {
-            previous = _scheduledRefresh;
-            _scheduledRefresh = scheduled;
-        }
-
-        Cancel(previous);
-        _ = WaitAndQueueRefreshAsync(delay, scheduled);
-    }
-
-    private async Task WaitAndQueueRefreshAsync(
-        TimeSpan delay,
-        CancellationTokenSource scheduled)
-    {
-        try
-        {
-            await Task.Delay(
-                delay,
-                _dependencies.TimeProvider,
-                scheduled.Token).ConfigureAwait(false);
-            QueueRefresh();
-        }
-        catch (OperationCanceledException) when (scheduled.IsCancellationRequested)
-        {
-        }
-        catch (ObjectDisposedException)
-        {
-        }
-        finally
-        {
-            lock (_sync)
+            if (_dependencies.Availability.IsPaused ||
+                _lifetimeCancellation.IsCancellationRequested ||
+                _disposeTask is not null)
             {
-                if (ReferenceEquals(_scheduledRefresh, scheduled))
-                {
-                    _scheduledRefresh = null;
-                }
+                return;
             }
 
-            scheduled.Dispose();
+            _scheduledRefresh = new ScheduledRefresh(
+                delay,
+                _dependencies.TimeProvider,
+                TryQueueSignalRefresh);
         }
     }
 
-    private void OnPaused(object? sender, EventArgs eventArgs) => CancelScheduledRefresh();
+    private void OnPaused(object? sender, EventArgs eventArgs) =>
+        _ = StopScheduledRefreshAsync();
 
     private void OnResumed(object? sender, EventArgs eventArgs) => TryQueueSignalRefresh();
 
@@ -91,20 +58,108 @@ public sealed partial class RateLimitSource
         _dependencies.Availability.NetworkAvailable -= OnNetworkAvailable;
     }
 
-    private void CancelScheduledRefresh()
+    private async Task StopScheduledRefreshAsync()
     {
-        CancellationTokenSource? scheduled;
+        ScheduledRefresh? scheduled;
         lock (_sync)
         {
             scheduled = _scheduledRefresh;
             _scheduledRefresh = null;
         }
 
-        Cancel(scheduled);
+        if (scheduled is not null)
+        {
+            await scheduled.DisposeAsync().ConfigureAwait(false);
+        }
     }
 
-    private static void Cancel(CancellationTokenSource? cancellation)
+    private sealed class ScheduledRefresh : IAsyncDisposable
     {
-        cancellation?.Cancel();
+        private readonly CancellationTokenSource _cancellation = new();
+        private readonly object _sync = new();
+        private Task? _disposeTask;
+        private readonly Task _runTask;
+
+        public ScheduledRefresh(
+            TimeSpan delay,
+            TimeProvider timeProvider,
+            Action callback)
+        {
+            _runTask = RunAsync(delay, timeProvider, callback);
+        }
+
+        public ValueTask DisposeAsync()
+        {
+            TaskCompletionSource? owner = null;
+            Task disposeTask;
+            lock (_sync)
+            {
+                if (_disposeTask is null)
+                {
+                    owner = new TaskCompletionSource(
+                        TaskCreationOptions.RunContinuationsAsynchronously);
+                    _disposeTask = owner.Task;
+                }
+
+                disposeTask = _disposeTask;
+            }
+
+            if (owner is not null)
+            {
+                _ = CompleteDisposeAsync(owner);
+            }
+
+            return new ValueTask(disposeTask);
+        }
+
+        private async Task RunAsync(
+            TimeSpan delay,
+            TimeProvider timeProvider,
+            Action callback)
+        {
+            try
+            {
+                await Task.Delay(delay, timeProvider, _cancellation.Token).ConfigureAwait(false);
+                callback();
+            }
+            catch (OperationCanceledException) when (_cancellation.IsCancellationRequested)
+            {
+            }
+        }
+
+        private async Task CompleteDisposeAsync(TaskCompletionSource completion)
+        {
+            var cleanupFailed = false;
+            try
+            {
+                _cancellation.Cancel();
+                await _runTask.ConfigureAwait(false);
+            }
+            catch
+            {
+                cleanupFailed = true;
+            }
+            finally
+            {
+                try
+                {
+                    _cancellation.Dispose();
+                }
+                catch
+                {
+                    cleanupFailed = true;
+                }
+
+                if (cleanupFailed)
+                {
+                    completion.TrySetException(
+                        new InvalidOperationException("清理额度刷新计时器失败。"));
+                }
+                else
+                {
+                    completion.TrySetResult();
+                }
+            }
+        }
     }
 }

@@ -27,7 +27,7 @@ public sealed partial class RateLimitSource
                 {
                     _backoff.Reset();
                     PublishConnection(QuotaConnectionState.AuthenticationRequired);
-                    ScheduleRefresh(RefreshInterval);
+                    await ScheduleRefreshAsync(RefreshInterval).ConfigureAwait(false);
                     return;
                 }
 
@@ -45,7 +45,7 @@ public sealed partial class RateLimitSource
             _backoff.Reset();
             PublishSnapshot(snapshot);
             PublishConnection(QuotaConnectionState.Live);
-            ScheduleRefresh(RefreshInterval);
+            await ScheduleRefreshAsync(RefreshInterval).ConfigureAwait(false);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
@@ -54,14 +54,14 @@ public sealed partial class RateLimitSource
         {
             await DisposeConnectionAsync().ConfigureAwait(false);
             PublishConnection(QuotaConnectionState.Unsupported);
-            ScheduleRefresh(RefreshInterval);
+            await ScheduleRefreshAsync(RefreshInterval).ConfigureAwait(false);
         }
         catch
         {
             await DisposeConnectionAsync().ConfigureAwait(false);
             PublishConnection(
                 _hasSnapshot ? QuotaConnectionState.Stale : QuotaConnectionState.Unavailable);
-            ScheduleRefresh(_backoff.NextDelay());
+            await ScheduleRefreshAsync(_backoff.NextDelay()).ConfigureAwait(false);
         }
     }
 

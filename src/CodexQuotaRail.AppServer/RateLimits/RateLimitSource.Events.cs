@@ -13,6 +13,26 @@ public sealed partial class RateLimitSource
             return;
         }
 
+        _callbackDispatcher.Dispatch(
+            () => InvokeSnapshotHandlers(handlers, snapshot));
+    }
+
+    private void PublishConnection(QuotaConnectionState state)
+    {
+        var handlers = ConnectionChanged;
+        if (handlers is null)
+        {
+            return;
+        }
+
+        _callbackDispatcher.Dispatch(
+            () => InvokeConnectionHandlers(handlers, state));
+    }
+
+    private void InvokeSnapshotHandlers(
+        EventHandler<RawQuotaSnapshot> handlers,
+        RawQuotaSnapshot snapshot)
+    {
         foreach (var subscriber in handlers.GetInvocationList())
         {
             try
@@ -25,14 +45,10 @@ public sealed partial class RateLimitSource
         }
     }
 
-    private void PublishConnection(QuotaConnectionState state)
+    private void InvokeConnectionHandlers(
+        EventHandler<QuotaConnectionState> handlers,
+        QuotaConnectionState state)
     {
-        var handlers = ConnectionChanged;
-        if (handlers is null)
-        {
-            return;
-        }
-
         foreach (var subscriber in handlers.GetInvocationList())
         {
             try
@@ -47,26 +63,88 @@ public sealed partial class RateLimitSource
 
     private async Task CompleteDisposeAsync(TaskCompletionSource completion)
     {
+        var cleanupFailed = false;
         try
         {
-            UnsubscribeAvailability();
-            CancelScheduledRefresh();
-            _lifetimeCancellation.Cancel();
+            try
+            {
+                UnsubscribeAvailability();
+            }
+            catch
+            {
+                cleanupFailed = true;
+            }
+
+            try
+            {
+                await StopScheduledRefreshAsync().ConfigureAwait(false);
+            }
+            catch
+            {
+                cleanupFailed = true;
+            }
+
+            try
+            {
+                _lifetimeCancellation.Cancel();
+            }
+            catch
+            {
+                cleanupFailed = true;
+            }
+
             var worker = _workerTask;
             if (worker is not null)
             {
-                await worker.ConfigureAwait(false);
+                try
+                {
+                    await worker.ConfigureAwait(false);
+                }
+                catch
+                {
+                    cleanupFailed = true;
+                }
             }
 
-            await DisposeConnectionAsync().ConfigureAwait(false);
-            _refreshSignal.Dispose();
-            _lifetimeCancellation.Dispose();
-            completion.TrySetResult();
+            try
+            {
+                await DisposeConnectionAsync().ConfigureAwait(false);
+            }
+            catch
+            {
+                cleanupFailed = true;
+            }
         }
-        catch
+        finally
         {
-            completion.TrySetException(
-                new AppServerProtocolException("清理额度来源失败。"));
+            CompletePendingWaiters();
+            try
+            {
+                _refreshSignal.Dispose();
+            }
+            catch
+            {
+                cleanupFailed = true;
+            }
+
+            try
+            {
+                _lifetimeCancellation.Dispose();
+            }
+            catch
+            {
+                cleanupFailed = true;
+            }
+
+            if (cleanupFailed)
+            {
+                completion.TrySetException(
+                    new AppServerProtocolException("清理额度来源失败。"));
+            }
+            else
+            {
+                completion.TrySetResult();
+            }
         }
     }
 
@@ -100,7 +178,7 @@ public sealed partial class RateLimitSource
         TaskCompletionSource[] waiters;
         lock (_sync)
         {
-            waiters = [.. _waiters];
+            waiters = [.. _waiters.Values];
             _waiters.Clear();
         }
 

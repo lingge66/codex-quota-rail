@@ -48,10 +48,19 @@ internal sealed class SourceFixture : IAsyncDisposable
     public ManualTimeProvider Time { get; }
 
     public static SourceFixture Create(params FakeRateLimitConnection[] connections)
-        => CreateWithExecutablePath(@"C:\tools\codex.exe", connections);
+        => CreateCore(@"C:\tools\codex.exe", initiallyPaused: false, connections);
+
+    public static SourceFixture CreatePaused(params FakeRateLimitConnection[] connections)
+        => CreateCore(@"C:\tools\codex.exe", initiallyPaused: true, connections);
 
     public static SourceFixture CreateWithExecutablePath(
         string executablePath,
+        params FakeRateLimitConnection[] connections)
+        => CreateCore(executablePath, initiallyPaused: false, connections);
+
+    private static SourceFixture CreateCore(
+        string executablePath,
+        bool initiallyPaused,
         params FakeRateLimitConnection[] connections)
     {
         var selected = connections.Length == 0
@@ -59,6 +68,11 @@ internal sealed class SourceFixture : IAsyncDisposable
             : connections;
         var factory = new FakeRateLimitConnectionFactory(selected);
         var availability = new FakeRateLimitAvailabilitySignal();
+        if (initiallyPaused)
+        {
+            availability.Pause();
+        }
+
         var time = new ManualTimeProvider();
         var source = new RateLimitSource(
             new RateLimitSourceDependencies(
