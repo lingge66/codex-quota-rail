@@ -35,6 +35,8 @@ internal sealed class FakeJsonLineTransport : IJsonLineTransport
 
     public bool PauseStart { get; init; }
 
+    public Action? StartCallback { get; set; }
+
     public Action? StartCancellationCallback { get; set; }
 
     public async Task StartAsync(CancellationToken cancellationToken)
@@ -42,6 +44,7 @@ internal sealed class FakeJsonLineTransport : IJsonLineTransport
         cancellationToken.ThrowIfCancellationRequested();
         Interlocked.Increment(ref _startCount);
         _startEntered.TrySetResult();
+        StartCallback?.Invoke();
         if (StartCancellationCallback is not null)
         {
             _startCancellationRegistration = cancellationToken.UnsafeRegister(

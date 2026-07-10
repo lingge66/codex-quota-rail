@@ -36,8 +36,11 @@ public sealed class JsonRpcConnection : IAsyncDisposable
 
     public event EventHandler<AppServerProtocolException>? ProtocolError;
 
+    public long DroppedCallbackCount => _callbackDispatcher.DroppedCount;
+
     public Task StartAsync(CancellationToken cancellationToken)
     {
+        TaskCompletionSource? startOwner = null;
         Task startTask;
         lock (_lifecycleLock)
         {
@@ -45,7 +48,9 @@ public sealed class JsonRpcConnection : IAsyncDisposable
             {
                 case ConnectionState.Created:
                     _state = ConnectionState.Starting;
-                    startTask = _startTask = StartCoreAsync();
+                    startOwner = new TaskCompletionSource(
+                        TaskCreationOptions.RunContinuationsAsynchronously);
+                    startTask = _startTask = startOwner.Task;
                     break;
                 case ConnectionState.Starting:
                 case ConnectionState.Started:
@@ -61,6 +66,11 @@ public sealed class JsonRpcConnection : IAsyncDisposable
                 default:
                     throw new InvalidOperationException("未知的 App Server 连接状态。");
             }
+        }
+
+        if (startOwner is not null)
+        {
+            _ = CompleteStartAsync(startOwner);
         }
 
         return cancellationToken.CanBeCanceled
@@ -338,39 +348,42 @@ public sealed class JsonRpcConnection : IAsyncDisposable
         }
     }
 
-    private async Task StartCoreAsync()
+    private async Task CompleteStartAsync(TaskCompletionSource completion)
     {
         try
         {
             await _transport.StartAsync(_lifetimeCancellation.Token).ConfigureAwait(false);
+            lock (_lifecycleLock)
+            {
+                if (_lifetimeCancellation.IsCancellationRequested ||
+                    _state is ConnectionState.Disposing or ConnectionState.Disposed)
+                {
+                    throw new OperationCanceledException(_lifetimeCancellation.Token);
+                }
+
+                ThrowIfUnavailableLocked();
+                if (_state != ConnectionState.Starting)
+                {
+                    throw new InvalidOperationException("App Server 启动状态无效。");
+                }
+
+                _readLoopTask = Task.Run(
+                    () => ReadLoopAsync(_lifetimeCancellation.Token),
+                    CancellationToken.None);
+                _state = ConnectionState.Started;
+            }
+
+            completion.TrySetResult();
         }
         catch (OperationCanceledException) when (_lifetimeCancellation.IsCancellationRequested)
         {
-            throw;
+            completion.TrySetCanceled(_lifetimeCancellation.Token);
         }
         catch
         {
             var error = new AppServerProtocolException("启动 App Server 连接失败。");
             SetTerminalError(error);
-            throw error;
-        }
-
-        lock (_lifecycleLock)
-        {
-            ObjectDisposedException.ThrowIf(
-                _state is ConnectionState.Disposing or ConnectionState.Disposed,
-                this);
-
-            ThrowIfUnavailableLocked();
-            if (_state != ConnectionState.Starting)
-            {
-                throw new InvalidOperationException("App Server 启动状态无效。");
-            }
-
-            _readLoopTask = Task.Run(
-                () => ReadLoopAsync(_lifetimeCancellation.Token),
-                CancellationToken.None);
-            _state = ConnectionState.Started;
+            completion.TrySetException(error);
         }
     }
 

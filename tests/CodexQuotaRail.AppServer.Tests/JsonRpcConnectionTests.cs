@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using System.ComponentModel;
+using System.Runtime.CompilerServices;
 using System.Text.Json;
 using CodexQuotaRail.AppServer.Protocol;
 using CodexQuotaRail.AppServer.Transport;
@@ -15,6 +16,14 @@ public sealed class JsonRpcConnectionTests
         "-Command",
         "[Console]::Error.WriteLine('cleanup-blocked'); Start-Sleep -Seconds 30",
     ];
+    private static readonly IReadOnlyList<string> FloodDiagnosticArguments =
+    [
+        "-NoProfile",
+        "-NonInteractive",
+        "-Command",
+        "1..256 | ForEach-Object { [Console]::Error.WriteLine('diagnostic') }; Start-Sleep -Seconds 30",
+    ];
+    private static readonly int[] ExpectedNotificationOrder = [1, 2, 3];
 
     private static readonly TimeSpan ImmediateFailureTimeout = TimeSpan.FromSeconds(1);
     private static readonly TimeSpan TestTimeout = TimeSpan.FromSeconds(5);
@@ -411,6 +420,150 @@ public sealed class JsonRpcConnectionTests
     }
 
     [Fact]
+    public async Task NotificationCallbacksPreserveFifoOrder()
+    {
+        var transport = new FakeJsonLineTransport();
+        await using var connection = new JsonRpcConnection(transport);
+        var observed = new ConcurrentQueue<int>();
+        var allReceived = NewCompletionSource();
+        connection.NotificationReceived += (_, notification) =>
+        {
+            observed.Enqueue(notification.Params.GetProperty("sequence").GetInt32());
+            if (observed.Count == 3)
+            {
+                allReceived.TrySetResult();
+            }
+        };
+        await StartAndInitializeAsync(connection, transport);
+
+        for (var sequence = 1; sequence <= 3; sequence++)
+        {
+            transport.QueueIncoming(
+                $"{{\"method\":\"test/notification\",\"params\":{{\"sequence\":{sequence}}}}}");
+        }
+
+        await allReceived.Task.WaitAsync(TestTimeout);
+        Assert.Equal(ExpectedNotificationOrder, observed);
+    }
+
+    [Fact]
+    public async Task NotificationSubscriberFailureDoesNotBlockLaterSubscriber()
+    {
+        var transport = new FakeJsonLineTransport();
+        await using var connection = new JsonRpcConnection(transport);
+        var laterSubscriber = NewCompletionSource();
+        connection.NotificationReceived += (_, _) => throw new InvalidOperationException("subscriber failure");
+        connection.NotificationReceived += (_, _) => laterSubscriber.TrySetResult();
+        await StartAndInitializeAsync(connection, transport);
+
+        transport.QueueIncoming("{\"method\":\"test/notification\",\"params\":{}}");
+
+        await laterSubscriber.Task.WaitAsync(TestTimeout);
+    }
+
+    [Fact]
+    public async Task NotificationCallbackDoesNotFlowReaderExecutionContext()
+    {
+        var transport = new FakeJsonLineTransport();
+        await using var connection = new JsonRpcConnection(transport);
+        var ambientValue = new AsyncLocal<string?>();
+        var observed = NewCompletionSource<string?>();
+        connection.NotificationReceived += (_, _) => observed.TrySetResult(ambientValue.Value);
+        ambientValue.Value = "reader-context";
+        await StartAndInitializeAsync(connection, transport);
+
+        transport.QueueIncoming("{\"method\":\"test/notification\",\"params\":{}}");
+
+        Assert.Null(await observed.Task.WaitAsync(TestTimeout));
+    }
+
+    [Fact]
+    public async Task DisposeClearsQueuedNotificationsAndReleasesSubscriberClosure()
+    {
+        var transport = new FakeJsonLineTransport();
+        var connection = new JsonRpcConnection(transport);
+        using var releaseFirstCallback = new ManualResetEventSlim();
+        var firstCallbackEntered = NewCompletionSource();
+        var firstCallbackExited = NewCompletionSource();
+        var unexpectedCallback = NewCompletionSource();
+        var callbackCount = 0;
+        connection.NotificationReceived += (_, _) =>
+        {
+            if (Interlocked.Increment(ref callbackCount) == 1)
+            {
+                firstCallbackEntered.TrySetResult();
+                releaseFirstCallback.Wait();
+                firstCallbackExited.TrySetResult();
+                return;
+            }
+
+            unexpectedCallback.TrySetResult();
+        };
+        await StartAndInitializeAsync(connection, transport);
+
+        transport.QueueIncoming("{\"method\":\"test/first\",\"params\":{}}");
+        await firstCallbackEntered.Task.WaitAsync(TestTimeout);
+        var subscriberMarker = await QueueTemporarySubscriberAsync(connection, transport);
+
+        try
+        {
+            await connection.DisposeAsync().AsTask().WaitAsync(TestTimeout);
+            ForceFullCollection();
+            Assert.False(subscriberMarker.IsAlive);
+        }
+        finally
+        {
+            releaseFirstCallback.Set();
+        }
+
+        await firstCallbackExited.Task.WaitAsync(TestTimeout);
+        await Assert.ThrowsAsync<TimeoutException>(
+            () => unexpectedCallback.Task.WaitAsync(TimeSpan.FromMilliseconds(200)));
+        Assert.Equal(1, Volatile.Read(ref callbackCount));
+    }
+
+    [Fact]
+    public async Task NotificationFloodDropsOldestQueuedCallbacksAndReportsMetadata()
+    {
+        var transport = new FakeJsonLineTransport();
+        await using var connection = new JsonRpcConnection(transport);
+        using var releaseFirstCallback = new ManualResetEventSlim();
+        var firstCallbackEntered = NewCompletionSource();
+        var secondSequence = NewCompletionSource<int>();
+        connection.NotificationReceived += (_, notification) =>
+        {
+            var sequence = notification.Params.GetProperty("sequence").GetInt32();
+            if (sequence == 0)
+            {
+                firstCallbackEntered.TrySetResult();
+                releaseFirstCallback.Wait();
+                return;
+            }
+
+            secondSequence.TrySetResult(sequence);
+        };
+        await StartAndInitializeAsync(connection, transport);
+
+        transport.QueueIncoming(
+            "{\"method\":\"test/notification\",\"params\":{\"sequence\":0}}");
+        await firstCallbackEntered.Task.WaitAsync(TestTimeout);
+        for (var sequence = 1; sequence <= 128; sequence++)
+        {
+            transport.QueueIncoming(
+                $"{{\"method\":\"test/notification\",\"params\":{{\"sequence\":{sequence}}}}}");
+        }
+
+        await WaitForReadBarrierAsync(connection, transport);
+        var droppedCount = connection.DroppedCallbackCount;
+        var secondCallbackStartedEarly = secondSequence.Task.IsCompleted;
+        releaseFirstCallback.Set();
+
+        Assert.True(droppedCount > 0);
+        Assert.False(secondCallbackStartedEarly);
+        Assert.True(await secondSequence.Task.WaitAsync(TestTimeout) > 1);
+    }
+
+    [Fact]
     public async Task StartAsyncStartsTransportAndExactlyOneBackgroundReader()
     {
         var transport = new FakeJsonLineTransport();
@@ -423,6 +576,34 @@ public sealed class JsonRpcConnectionTests
 
         Assert.Equal(1, transport.StartCount);
         Assert.Equal(1, transport.ReadCount);
+    }
+
+    [Fact]
+    public async Task SynchronousStartReentrantDisposeWaitsForPublishedStartTask()
+    {
+        var transport = new FakeJsonLineTransport();
+        var connection = new JsonRpcConnection(transport);
+        Task? reentrantDispose = null;
+        var disposeCountInsideStart = -1;
+        transport.StartCallback = () =>
+        {
+            reentrantDispose = connection.DisposeAsync().AsTask();
+            disposeCountInsideStart = transport.DisposeCount;
+        };
+
+        var startTask = connection.StartAsync(CancellationToken.None);
+        var startError = await Record.ExceptionAsync(
+            () => startTask.WaitAsync(ImmediateFailureTimeout));
+        Assert.NotNull(reentrantDispose);
+        var disposeError = await Record.ExceptionAsync(
+            () => reentrantDispose.WaitAsync(ImmediateFailureTimeout));
+
+        Assert.Equal(0, disposeCountInsideStart);
+        Assert.IsAssignableFrom<OperationCanceledException>(startError);
+        Assert.Null(disposeError);
+        Assert.Equal(1, transport.StartCount);
+        Assert.Equal(1, transport.DisposeCount);
+        Assert.Equal(0, transport.ReadCount);
     }
 
     [Fact]
@@ -757,6 +938,43 @@ public sealed class JsonRpcConnectionTests
         }
     }
 
+    [Fact]
+    public async Task ProcessDiagnosticFloodIsBoundedAndReportsDroppedMetadata()
+    {
+        using var releaseFirstDiagnostic = new ManualResetEventSlim();
+        var firstDiagnosticEntered = NewCompletionSource();
+        var transport = new ProcessJsonLineTransport(
+            new ProcessLaunchSpec("powershell.exe", FloodDiagnosticArguments),
+            _ =>
+            {
+                firstDiagnosticEntered.TrySetResult();
+                releaseFirstDiagnostic.Wait();
+            });
+        using var timeout = new CancellationTokenSource(TestTimeout);
+
+        try
+        {
+            await transport.StartAsync(timeout.Token);
+            await firstDiagnosticEntered.Task.WaitAsync(TestTimeout);
+            await WaitUntilAsync(
+                () => transport.DroppedDiagnosticCount > 0,
+                timeout.Token);
+
+            Assert.True(transport.DroppedDiagnosticCount > 0);
+        }
+        finally
+        {
+            try
+            {
+                await transport.DisposeAsync().AsTask().WaitAsync(TestTimeout);
+            }
+            finally
+            {
+                releaseFirstDiagnostic.Set();
+            }
+        }
+    }
+
     private static TaskCompletionSource<T> NewCompletionSource<T>() =>
         new(TaskCreationOptions.RunContinuationsAsynchronously);
 
@@ -776,6 +994,58 @@ public sealed class JsonRpcConnectionTests
 
         using var initialized = JsonDocument.Parse(await ReadWrittenLineAsync(transport));
         Assert.Equal("initialized", initialized.RootElement.GetProperty("method").GetString());
+    }
+
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    private static async Task<WeakReference> QueueTemporarySubscriberAsync(
+        JsonRpcConnection connection,
+        FakeJsonLineTransport transport)
+    {
+        var marker = new object();
+        var weakMarker = new WeakReference(marker);
+        EventHandler<JsonRpcNotification> subscriber = (_, _) => GC.KeepAlive(marker);
+        connection.NotificationReceived += subscriber;
+        try
+        {
+            transport.QueueIncoming("{\"method\":\"test/queued\",\"params\":{}}");
+            await WaitForReadBarrierAsync(connection, transport);
+        }
+        finally
+        {
+            connection.NotificationReceived -= subscriber;
+        }
+
+        return weakMarker;
+    }
+
+    private static async Task WaitForReadBarrierAsync(
+        JsonRpcConnection connection,
+        FakeJsonLineTransport transport)
+    {
+        var barrierTask = connection.RequestAsync(
+            "test/read-barrier",
+            null,
+            CancellationToken.None);
+        var barrierRequest = ParseRequest(await ReadWrittenLineAsync(transport));
+        transport.QueueIncoming($"{{\"id\":{barrierRequest.Id},\"result\":{{}}}}");
+        await barrierTask.WaitAsync(TestTimeout);
+    }
+
+    private static void ForceFullCollection()
+    {
+        GC.Collect();
+        GC.WaitForPendingFinalizers();
+        GC.Collect();
+    }
+
+    private static async Task WaitUntilAsync(
+        Func<bool> condition,
+        CancellationToken cancellationToken)
+    {
+        while (!condition())
+        {
+            await Task.Delay(TimeSpan.FromMilliseconds(10), cancellationToken);
+        }
     }
 
     private static async Task<string> ReadWrittenLineAsync(FakeJsonLineTransport transport)

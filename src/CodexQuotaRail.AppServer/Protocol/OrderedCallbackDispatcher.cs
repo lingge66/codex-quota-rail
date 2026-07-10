@@ -2,9 +2,32 @@ namespace CodexQuotaRail.AppServer.Protocol;
 
 internal sealed class OrderedCallbackDispatcher
 {
+    private const int DefaultCapacity = 64;
+    private readonly int _capacity;
+    private readonly Queue<Action> _pendingCallbacks = new();
     private readonly object _sync = new();
+    private long _droppedCount;
     private bool _stopped;
-    private Task _tail = Task.CompletedTask;
+    private TaskCompletionSource _workAvailable = NewCompletionSource();
+
+    public OrderedCallbackDispatcher(int capacity = DefaultCapacity)
+    {
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(capacity);
+        _capacity = capacity;
+
+        if (ExecutionContext.IsFlowSuppressed())
+        {
+            _ = Task.Run(RunWorkerAsync);
+            return;
+        }
+
+        using (ExecutionContext.SuppressFlow())
+        {
+            _ = Task.Run(RunWorkerAsync);
+        }
+    }
+
+    public long DroppedCount => Interlocked.Read(ref _droppedCount);
 
     public void Dispatch(Action callback)
     {
@@ -14,19 +37,18 @@ internal sealed class OrderedCallbackDispatcher
         {
             if (_stopped)
             {
+                _droppedCount++;
                 return;
             }
 
-            if (ExecutionContext.IsFlowSuppressed())
+            if (_pendingCallbacks.Count == _capacity)
             {
-                Schedule(callback);
-                return;
+                _ = _pendingCallbacks.Dequeue();
+                _droppedCount++;
             }
 
-            using (ExecutionContext.SuppressFlow())
-            {
-                Schedule(callback);
-            }
+            _pendingCallbacks.Enqueue(callback);
+            _workAvailable.TrySetResult();
         }
     }
 
@@ -34,41 +56,67 @@ internal sealed class OrderedCallbackDispatcher
     {
         lock (_sync)
         {
-            _stopped = true;
-        }
-    }
-
-    private void Schedule(Action callback)
-    {
-        _tail = _tail.ContinueWith(
-            static (_, state) => ((CallbackWorkItem)state!).Invoke(),
-            new CallbackWorkItem(this, callback),
-            CancellationToken.None,
-            TaskContinuationOptions.DenyChildAttach,
-            TaskScheduler.Default);
-    }
-
-    private void Invoke(Action callback)
-    {
-        lock (_sync)
-        {
             if (_stopped)
             {
                 return;
             }
-        }
 
-        try
-        {
-            callback();
-        }
-        catch
-        {
+            _stopped = true;
+            _droppedCount += _pendingCallbacks.Count;
+            _pendingCallbacks.Clear();
+            _workAvailable.TrySetResult();
         }
     }
 
-    private sealed record CallbackWorkItem(OrderedCallbackDispatcher Owner, Action Callback)
+    private static TaskCompletionSource NewCompletionSource() =>
+        new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+    private async Task RunWorkerAsync()
     {
-        public void Invoke() => Owner.Invoke(Callback);
+        while (true)
+        {
+            Action? callback;
+            TaskCompletionSource? workSignal;
+            lock (_sync)
+            {
+                if (_stopped)
+                {
+                    return;
+                }
+
+                if (_pendingCallbacks.Count > 0)
+                {
+                    callback = _pendingCallbacks.Dequeue();
+                    workSignal = null;
+                }
+                else
+                {
+                    callback = null;
+                    workSignal = _workAvailable;
+                }
+            }
+
+            if (callback is not null)
+            {
+                try
+                {
+                    callback();
+                }
+                catch
+                {
+                }
+
+                continue;
+            }
+
+            await workSignal!.Task.ConfigureAwait(false);
+            lock (_sync)
+            {
+                if (ReferenceEquals(_workAvailable, workSignal))
+                {
+                    _workAvailable = NewCompletionSource();
+                }
+            }
+        }
     }
 }

@@ -33,6 +33,8 @@ public sealed class ProcessJsonLineTransport : IJsonLineTransport
         _diagnosticSink = diagnosticSink;
     }
 
+    public long DroppedDiagnosticCount => _diagnosticDispatcher.DroppedCount;
+
     public Task StartAsync(CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
