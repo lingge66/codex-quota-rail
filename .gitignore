@@ -1,6 +1,7 @@
 # Local visual brainstorming artifacts
 .superpowers/
 .codegraph/
+.worktrees/
 
 # Build outputs (reserved for implementation)
 bin/
