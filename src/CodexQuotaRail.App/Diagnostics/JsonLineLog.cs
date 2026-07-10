@@ -5,7 +5,17 @@ using System.Text.RegularExpressions;
 
 namespace CodexQuotaRail.App.Diagnostics;
 
-public sealed class JsonLineLog : IDisposable
+public interface IApplicationLog
+{
+    ValueTask WriteAsync(
+        string level,
+        string eventName,
+        string message,
+        Exception? exception = null,
+        CancellationToken cancellationToken = default);
+}
+
+public sealed class JsonLineLog : IDisposable, IApplicationLog
 {
     private const long DefaultMaxFileBytes = 5 * 1024 * 1024;
     private static readonly Regex UserPathPattern = new(

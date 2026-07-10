@@ -47,7 +47,24 @@ public interface ITrayIconHost : IDisposable
     void SetMenu(IReadOnlyList<TrayMenuItemModel> menu);
 }
 
-public sealed class TrayIconService : IDisposable
+public interface ITrayIconService : IDisposable
+{
+    event EventHandler<TrayCommandRequest>? CommandRequested;
+
+    void UpdateState(TrayState state);
+}
+
+public interface ITrayIconFactory
+{
+    ITrayIconService Create();
+}
+
+public sealed class TrayIconFactory : ITrayIconFactory
+{
+    public ITrayIconService Create() => new TrayIconService();
+}
+
+public sealed class TrayIconService : ITrayIconService
 {
     private readonly ITrayIconHost _host;
     private TrayState _state = new(

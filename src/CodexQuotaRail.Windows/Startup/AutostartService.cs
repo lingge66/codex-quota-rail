@@ -11,7 +11,14 @@ public interface IRunRegistry
     void DeleteValue(string name);
 }
 
-public sealed class AutostartService
+public interface IAutostartService
+{
+    bool IsEnabled();
+
+    void SetEnabled(bool enabled);
+}
+
+public sealed class AutostartService : IAutostartService
 {
     public const string ValueName = "CodexQuotaRail";
     private readonly string _command;

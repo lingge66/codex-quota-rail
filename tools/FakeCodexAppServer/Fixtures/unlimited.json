@@ -1,0 +1,13 @@
+{
+  "rateLimits": {
+    "primary": {
+      "usedPercent": null,
+      "windowDurationMins": null,
+      "resetsAt": null
+    },
+    "credits": {
+      "unlimited": true
+    },
+    "planType": "enterprise"
+  }
+}

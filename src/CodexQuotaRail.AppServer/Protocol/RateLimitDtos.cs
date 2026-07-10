@@ -98,12 +98,20 @@ public static class RateLimitSnapshotMapper
         }
 
         return new RawQuotaWindow(
-            label,
+            DisplayLabel(label, source.WindowDurationMins),
             source.UsedPercent,
             SafeDurationMinutes(source.WindowDurationMins),
             SafeUnixSeconds(source.ResetsAt),
             unlimited);
     }
+
+    private static string DisplayLabel(string fallback, long? durationMinutes) =>
+        durationMinutes switch
+        {
+            300 => "5 小时",
+            10_080 => "本周",
+            _ => fallback,
+        };
 
     private static long? SafeDurationMinutes(long? minutes)
     {

@@ -4,7 +4,16 @@ using System.Text.Json.Serialization;
 
 namespace CodexQuotaRail.App.Settings;
 
-public sealed class JsonSettingsStore : IDisposable
+public interface IAppSettingsStore : IDisposable
+{
+    ValueTask<AppSettings> LoadAsync(CancellationToken cancellationToken = default);
+
+    ValueTask SaveAsync(
+        AppSettings settings,
+        CancellationToken cancellationToken = default);
+}
+
+public sealed class JsonSettingsStore : IAppSettingsStore
 {
     private const int CurrentSchemaVersion = 1;
     private static readonly JsonSerializerOptions SerializerOptions = CreateSerializerOptions();

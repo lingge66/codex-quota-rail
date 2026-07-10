@@ -42,6 +42,8 @@ public sealed class RateLimitMappingTests
         // Then
         Assert.Equal(68, raw.Primary?.UsedPercent);
         Assert.Equal(25, raw.Secondary?.UsedPercent);
+        Assert.Equal("5 小时", raw.Primary?.Label);
+        Assert.Equal("本周", raw.Secondary?.Label);
         Assert.Equal(32, display.Windows[0].AvailablePercent);
         Assert.Equal(75, display.Windows[1].AvailablePercent);
     }

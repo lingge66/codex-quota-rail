@@ -1,6 +1,15 @@
 namespace CodexQuotaRail.Windows.Windows;
 
-public sealed partial class CodexWindowTracker : IDisposable
+public interface ITrackedWindowSource : IDisposable
+{
+    event EventHandler<TrackedWindowSnapshot?>? SnapshotChanged;
+
+    TrackedWindowSnapshot? CurrentSnapshot { get; }
+
+    void Start();
+}
+
+public sealed partial class CodexWindowTracker : ITrackedWindowSource
 {
     private static readonly TrackedWindowEvent[] Events =
     [

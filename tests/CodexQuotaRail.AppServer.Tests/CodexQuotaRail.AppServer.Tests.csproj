@@ -28,6 +28,8 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\CodexQuotaRail.AppServer\CodexQuotaRail.AppServer.csproj" />
+    <ProjectReference Include="..\..\tools\FakeCodexAppServer\FakeCodexAppServer.csproj"
+                      ReferenceOutputAssembly="false" />
   </ItemGroup>
 
 </Project>
