@@ -1,5 +1,7 @@
 # Codex Quota Rail UI 演示效果图设计规格
 
+> 后续变更（2026-07-11）：用户将四图方案收敛为单图展示。当前唯一成品为 `docs/assets/demo/codex-quota-rail-ui-demo.png`，并以中文 `README.md` 作为 GitHub 默认项目介绍；下方四图内容保留为历史设计记录。
+
 - 状态：用户已确认视觉方向 A（真实桌面演示）
 - 日期：2026-07-11
 - 用途：GitHub README、X（Twitter）与 QQ 社群宣传

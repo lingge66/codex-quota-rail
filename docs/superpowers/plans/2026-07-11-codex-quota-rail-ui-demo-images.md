@@ -1,5 +1,7 @@
 # Codex Quota Rail UI Demo Images Implementation Plan
 
+> 后续变更（2026-07-11）：用户删除了原四图展示并指定单张详情图作为当前 GitHub 演示。现行文件为 `docs/assets/demo/codex-quota-rail-ui-demo.png`；本计划的四图步骤保留为当时的执行记录。
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** 生成并交付 4 张真实桌面风格的 Codex Quota Rail UI 演示图，同时在 GitHub 中英文 README 中展示它们。

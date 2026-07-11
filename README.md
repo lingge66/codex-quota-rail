@@ -1,37 +1,40 @@
-# Codex Quota Rail
+# Codex 可用额度边缘轨
 
-Codex Quota Rail is a native Windows and macOS utility that attaches a non-activating quota rail to the outside top edge of the Codex desktop window. It shows **available** quota: 100% is green, then the rail transitions through yellow to red as quota runs out.
+[English](README.en.md)
 
-> This is an independent open-source project. It is not affiliated with or endorsed by OpenAI.
+这是一个 Windows 与 macOS 常驻小工具：它把一条不会抢焦点的额度轨贴在 Codex 桌面窗口顶部外侧，直接显示**可用额度**。100% 为绿色，额度降低时逐渐变黄，接近耗尽时变红。
 
-## Highlights
+> 本项目为独立开源项目，并非 OpenAI 官方产品，也未获得 OpenAI 背书。
 
-- Reads quota only through the official local Codex App Server protocol.
-- Never scrapes the UI, clicks the Usage page, estimates quota, or reads chats.
-- 22 px dual-window rail, with a 4 px compact mode when Codex is maximized.
-- Stays visible at 52% opacity when Codex loses focus and becomes clear again on focus.
-- Follows move, resize, minimize, restore, DPI changes, sleep/resume, network recovery, and Explorer restart.
-- Tray controls for refresh, follow/pause, theme, reduced motion, autostart, logs, and manual update checks.
-- LingGe branding is used consistently for the executable, tray, and installer icons.
-- Zero telemetry. Update checks only run after the user clicks **检查更新**.
-- The tray menu includes a fixed HTTPS shortcut to the LingGe personal website.
-- The macOS app uses native SwiftUI and AppKit, with a menu bar item, Accessibility-based window tracking, and a Universal Intel/Apple Silicon build.
+## 主要能力
 
-Supported platforms are Windows x64 and macOS 13 or later. A future renderer can add a Codex pet without changing the quota source.
+- 额度只读取本机官方 Codex App Server，不抓网页、不 OCR、不模拟点击、不本地估算。
+- 普通窗口显示 22px 双额度轨；Codex 最大化或外侧空间不足时自动切换 4px 紧凑轨。
+- Codex 失焦后继续显示但降至 52% 透明度，切回 Codex 后恢复清晰。
+- 跟随移动、缩放、最小化、恢复、跨屏 DPI、睡眠恢复、网络恢复和 Explorer 重启。
+- 托盘可立即刷新、暂停跟随、切换主题、减少动画、关闭开机自启、查看日志、手动检查更新，并可打开领哥个人网站。
+- 应用文件、托盘和安装器统一使用领哥 LOGO。
+- 零遥测；只有用户点击“检查更新”后才访问 GitHub API。
+- 渲染接口已为后续“Codex 宠物显示额度”预留扩展点。
+- macOS 版采用原生 SwiftUI + AppKit，支持 Intel 与 Apple Silicon Universal 应用、菜单栏、辅助功能窗口跟踪和系统登录项。
 
-[Download the Windows and macOS prerelease](https://github.com/lingge66/codex-quota-rail/releases/tag/v0.1.0-rc.8). Current builds are not commercially code-signed; verify the bundled SHA-256 first.
+支持 Windows x64，以及 macOS 13 或更高版本。
 
-## UI demo
+[下载 Windows 与 macOS 预发布包](https://github.com/lingge66/codex-quota-rail/releases/tag/v0.1.0-rc.8)。当前构建未使用商业代码签名，请先核对随包 SHA-256。
 
-In a normal window, the 22 px dual quota rail stays outside the top edge of Codex. The details card opens only after clicking the rail.
+## UI 演示
 
+点击 22px 额度轨后才会展开详情卡，展示短周期和长周期的可用额度与重置时间。
 
+<p align="center">
+  <img src="docs/assets/demo/codex-quota-rail-ui-demo.png" width="100%" alt="Codex 可用额度边缘轨与点击展开的详情卡">
+</p>
 
-## Run from source
+## 从源码运行
 
 ### Windows
 
-Requirements: Windows 10 2004 or later and .NET 8 SDK.
+需要 Windows 10 2004 或更高版本、.NET 8 SDK，并已登录 Codex 桌面应用。
 
 ```powershell
 dotnet restore --locked-mode
@@ -42,7 +45,7 @@ dotnet run --project src/CodexQuotaRail.App --configuration Release
 
 ### macOS
 
-Requirements: macOS 13 or later and Xcode 16 command-line tools.
+需要 macOS 13 或更高版本、Xcode 16 命令行工具，并已登录 Codex 桌面应用。
 
 ```bash
 swift test --package-path macos/Packages/CodexQuotaKit
@@ -50,37 +53,37 @@ swift build --package-path macos --configuration debug
 bash macos/Scripts/build-universal.sh 0.1.0
 ```
 
-See the [macOS install guide](docs/macos-install.md) and [fork customization guide](docs/macos-customization.md).
+产物位于 `artifacts/macos/CodexQuotaRail-macOS-universal.app.zip`。安装、首次打开和辅助功能授权见 [macOS 安装说明](docs/macos-install.md)。Fork 换名、换 LOGO、换网站和制作主题见 [macOS 自定义搭建](docs/macos-customization.md)。
 
-## Verify a release
+## 验证发布文件
 
-Download the ZIP or installer, `SHA256SUMS.txt`, and `CodexQuotaRail.spdx.json` from the same GitHub Release. Then run:
+请从同一个 GitHub Release 下载程序、`SHA256SUMS.txt` 和 `CodexQuotaRail.spdx.json`，再核对：
 
 ```powershell
 Get-FileHash .\CodexQuotaRail-win-x64.zip -Algorithm SHA256
 Get-Content .\SHA256SUMS.txt
 ```
 
-Until code signing is configured, Windows may show an unknown publisher warning. Verify the hash before running an unsigned build.
+配置代码签名之前，Windows 可能提示“未知发布者”。运行未签名版本前请先核对 SHA-256。
 
-See [中文说明](README.zh-CN.md), [privacy](docs/privacy.md), [architecture](docs/architecture.md), and [troubleshooting](docs/troubleshooting.md).
+更多信息见[隐私说明](docs/privacy.md)、[架构说明](docs/architecture.md)、[故障排查](docs/troubleshooting.md)和[发布检查表](docs/release-checklist.md)。
 
-## Contact LingGe and join the community
+## 联系领哥与加入社群
 
-| Destination | Link |
+| 入口 | 链接 |
 | --- | --- |
-| LingGe's website | [lingge66.pages.dev](https://lingge66.pages.dev/) |
-| X (Twitter) | [@shangdu2005](https://x.com/shangdu2005) |
-| QQ community | [Open the community page](https://lingge66.pages.dev/community/) |
+| 领哥个人网站 | [lingge66.pages.dev](https://lingge66.pages.dev/) |
+| X（Twitter） | [@shangdu2005](https://x.com/shangdu2005) |
+| QQ 社群 | [打开社群页面](https://lingge66.pages.dev/community/) |
 
 <p align="center">
   <a href="https://lingge66.pages.dev/community/">
-    <img src="docs/assets/lingge-qq-community.png" width="320" alt="LingGe QQ community QR code">
+    <img src="docs/assets/lingge-qq-community.png" width="320" alt="领哥 QQ 社群二维码">
   </a>
   <br>
-  <sub>Scan the QR code to join the QQ community, or click it to open the community page.</sub>
+  <sub>扫描二维码加入 QQ 社群，或点击二维码打开社群页面</sub>
 </p>
 
-## License
+## 许可证
 
-MIT. See [LICENSE](LICENSE) and [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md).
+MIT，详见 [LICENSE](LICENSE) 与 [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md)。
