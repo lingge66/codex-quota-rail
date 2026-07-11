@@ -26,6 +26,21 @@ jobs:
           bash macos/Scripts/verify-app.sh artifacts/macos/unpacked/CodexQuotaRailMac.app
           cd artifacts/macos
           shasum -a 256 -c SHA256SUMS.txt
+      - name: Smoke test preview and capture UI
+        run: |
+          APP="artifacts/macos/unpacked/CodexQuotaRailMac.app"
+          LOG="artifacts/macos/rail-preview.log"
+          "$APP/Contents/MacOS/CodexQuotaRailMac" --rail-preview >"$LOG" 2>&1 &
+          PID=$!
+          cleanup() {
+            kill "$PID" 2>/dev/null || true
+            wait "$PID" 2>/dev/null || true
+          }
+          trap cleanup EXIT
+          sleep 4
+          kill -0 "$PID"
+          screencapture -x artifacts/macos/rail-preview.png
+          test -s artifacts/macos/rail-preview.png
       - name: Upload macOS artifact
         uses: actions/upload-artifact@v4
         with:
@@ -34,3 +49,5 @@ jobs:
             artifacts/macos/CodexQuotaRail-macOS-universal.app.zip
             artifacts/macos/SHA256SUMS.txt
             artifacts/macos/VERSION.txt
+            artifacts/macos/rail-preview.png
+            artifacts/macos/rail-preview.log
