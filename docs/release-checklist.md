@@ -2,7 +2,7 @@
 
 ## 自动化验证
 
-- [x] `dotnet test --configuration Release --collect:"XPlat Code Coverage"`：197 项通过，4 份 Cobertura 文件已生成。
+- [x] `dotnet test --configuration Release`：203 项通过；覆盖全部 12 个托盘点击入口、原生鼠标消息、非激活策略、主题实时换肤与固定网站地址。
 - [x] `dotnet build --configuration Release --no-restore`：0 警告，0 错误。
 - [x] 更新检查测试覆盖固定仓库地址、User-Agent、预发布过滤和超时。
 - [ ] NSIS 3.12 本机安装/卸载验证：当前 QA 机器未安装该依赖。
@@ -11,10 +11,16 @@
 
 - [x] 真实 Codex 窗口外侧轨高度 22px，左右边界与 Codex 一致，轨道底边与窗口顶边精确相接。
 - [x] 真实 Codex 最大化后切为 4px，恢复后回到 22px；最小化时隐藏，恢复时重新显示。
+- [x] 可见的 22px 轨点击会打开详情且不激活轨道；移出、Codex 失焦、窗口移动和紧凑模式会关闭，4px 轨不会弹出详情。
+- [x] 轨道 HWND owner 等于真实 Codex HWND；最大化时轨道为 4px 且 Z 序紧邻 Codex 上方，恢复后为 22px。
 - [x] 第二实例在 5 秒内以退出码 0 结束，系统仅保留一个主实例。
 - [x] 失焦 52% 与恢复 100% 由放置计算、窗口前景事件和动画测试覆盖；WPF 每像素透明窗口不暴露可供外部读取的固定 Alpha 值。
 - [x] 睡眠/恢复、网络恢复、Explorer 托盘重建与 DPI 去重有自动化测试。
 - [x] UI Automation 名称、非激活窗口、200% 弹层布局与减少动画有自动化测试。
+- [x] `0.1.0-rc.3` 便携 EXE 在真实 `OpenAI.Codex` 包窗口上显示 2217×22 轨道，owner 精确等于 ChatGPT 宿主 HWND；真实鼠标点击可打开详情，失焦/移出后自动收回。
+- [x] 真实鼠标点击前后 foreground HWND 均保持为 Codex；详情 Popup 实测 280×139，移出 700ms 后关闭。
+- [x] 托盘选择浅色/深色会立即更新现有轨道，背景实测从 `#ECECEA` 切换为 `#10100E`，无需重启。
+- [x] `0.1.0-rc.4` 托盘菜单实测“领哥个人网站”位于“故障排查”和“退出”之间；中文无截断，点击后默认浏览器打开 `https://lingge66.pages.dev/`。
 - [ ] 两台不同 DPI 的物理显示器、真实睡眠与 Explorer 重启需在发布候选安装包上复验。
 
 ## 性能（2026-07-11，Windows 10.0.26100 x64）
@@ -36,7 +42,8 @@ CPU 根因是全局 WinEvent 位置事件触发全桌面身份扫描；按已知
 - [x] 真实 Codex 26.707.3748.0 验收中，UI Automation 确认存在额度百分比与“可用”文案，且没有“正在连接/不可用”；未记录实际额度值。
 - [x] 当日日志共 4 行，敏感模式扫描命中 0。
 - [x] 手动更新检查只访问固定 GitHub Release API，打开浏览器前再次确认。
-- [x] 便携 ZIP（88,871,856 字节）、SHA-256 与 SPDX SBOM 已由 `build-release.ps1 -SkipInstaller` 生成并复核。
+- [x] `0.1.0-rc.4` 便携 ZIP（88,937,314 字节）、SHA-256 `e69b2ace82420181de67234b054d8ad3e32d4cf117dddcc686f40f9f7fdf5220` 与 SPDX SBOM 已由 `build-release.ps1 -SkipInstaller -AllowDirty` 重新生成并复核。
+- [x] 源 ICO 的 16/20/24/32/40/48/64/128/256px 帧均可由 Windows 解码；已从 Release 与便携 EXE 反向提取并目视确认领哥 LOGO。
 - [x] 自包含发布目录中的 `CodexQuotaRail.App.exe` 已在无 .NET 运行时依赖模式下启动，并成功拉起假 App Server 完成冒烟验证。
 - [ ] Setup EXE 等待本机取得 NSIS 3.12 安装许可后编译；CI 已固定 3.12 并会生成安装器。
 - [ ] 未签名构建名称和 Release 说明明确标出未知发布者风险。

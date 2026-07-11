@@ -1,6 +1,6 @@
 # Codex 可用额度边缘轨
 
-这是一个 Windows 常驻小工具：它把一条不会抢焦点的额度轨贴在 Codex 桌面窗口顶部外侧，直接显示**可用额度**。100% 为绿色，额度降低时逐渐变黄，接近耗尽时变红。
+这是一个 Windows 与 macOS 常驻小工具：它把一条不会抢焦点的额度轨贴在 Codex 桌面窗口顶部外侧，直接显示**可用额度**。100% 为绿色，额度降低时逐渐变黄，接近耗尽时变红。
 
 > 本项目为独立开源项目，并非 OpenAI 官方产品，也未获得 OpenAI 背书。
 
@@ -10,13 +10,17 @@
 - 普通窗口显示 22px 双额度轨；Codex 最大化或外侧空间不足时自动切换 4px 紧凑轨。
 - Codex 失焦后继续显示但降至 52% 透明度，切回 Codex 后恢复清晰。
 - 跟随移动、缩放、最小化、恢复、跨屏 DPI、睡眠恢复、网络恢复和 Explorer 重启。
-- 托盘可立即刷新、暂停跟随、切换主题、减少动画、关闭开机自启、查看日志和手动检查更新。
+- 托盘可立即刷新、暂停跟随、切换主题、减少动画、关闭开机自启、查看日志、手动检查更新，并可打开领哥个人网站。
+- 应用文件、托盘和安装器统一使用领哥 LOGO。
 - 零遥测；只有用户点击“检查更新”后才访问 GitHub API。
 - 渲染接口已为后续“Codex 宠物显示额度”预留扩展点。
+- macOS 版采用原生 SwiftUI + AppKit，支持 Intel 与 Apple Silicon Universal 应用、菜单栏、辅助功能窗口跟踪和系统登录项。
 
-首个版本仅支持 Windows x64。
+支持 Windows x64，以及 macOS 13 或更高版本。
 
 ## 从源码运行
+
+### Windows
 
 需要 Windows 10 2004 或更高版本、.NET 8 SDK，并已登录 Codex 桌面应用。
 
@@ -26,6 +30,18 @@ dotnet build --configuration Release --no-restore
 dotnet test --configuration Release --no-build
 dotnet run --project src/CodexQuotaRail.App --configuration Release
 ```
+
+### macOS
+
+需要 macOS 13 或更高版本、Xcode 16 命令行工具，并已登录 Codex 桌面应用。
+
+```bash
+swift test --package-path macos/Packages/CodexQuotaKit
+swift build --package-path macos --configuration debug
+bash macos/Scripts/build-universal.sh 0.1.0
+```
+
+产物位于 `artifacts/macos/CodexQuotaRail-macOS-universal.app.zip`。安装、首次打开和辅助功能授权见 [macOS 安装说明](docs/macos-install.md)。Fork 换名、换 LOGO、换网站和制作主题见 [macOS 自定义搭建](docs/macos-customization.md)。
 
 ## 验证发布文件
 

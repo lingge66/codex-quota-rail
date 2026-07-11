@@ -44,6 +44,8 @@ Codex Quota Rail 是一个安静、精密的开发者仪表，视觉上像 Codex
 
 - Primary: `Segoe UI Variable Text, Segoe UI, Microsoft YaHei UI, sans-serif`
 - Mono: `Cascadia Mono, Consolas, monospace`
+- macOS Primary: system `SF Pro Text`，中文回退由系统选择 `PingFang SC`。
+- macOS Mono: system `SF Mono`。
 - 边缘轨最多使用两种字体；`CODEX` 可用 Mono，其余使用 Primary。
 
 ## 4. Spacing & Layout
@@ -76,6 +78,7 @@ Codex Quota Rail 是一个安静、精密的开发者仪表，视觉上像 Codex
 - **Variants**: `ExternalRail` 22px、`CompactTitleBar` 4px、`Hidden`。
 - **Spacing**: `Space.Half`、`Space.1`、`Space.2`。
 - **States**: focused 100% opacity、unfocused 52%、unavailable、unlimited、exhausted。
+- **Z-order**: 通过 Win32 owner 关系保持在 Codex 上方，不使用全局 Topmost；其他应用仍可同时覆盖 Codex 与轨道。
 - **Accessibility**: 不获取键盘焦点；颜色外保留文本语义；详情卡不改变 Tab 顺序。
 - **Motion**: 只动画 opacity / transform；减少动画时全部静态。
 
@@ -89,15 +92,31 @@ Codex Quota Rail 是一个安静、精密的开发者仪表，视觉上像 Codex
 ### Hover Detail
 
 - **Structure**: non-focusable Popup → bordered detail surface → per-window rows → update time。
-- **States**: hover delay 250ms、pointer leave close、no keyboard activation。
-- **Accessibility**: 不抢占 Codex 键盘焦点，内容与主轨文案一致。
+- **States**: 点击 22px 轨展开、跨窗口离开宽限 160ms、失焦/移动/紧凑模式立即关闭、no keyboard activation。
+- **Visibility**: 可见的 22px 外侧轨允许点击打开；4px 紧凑轨永不弹出详情；Codex 从前景切走时自动关闭。
+- **Accessibility**: 通过 `WM_MOUSEACTIVATE → MA_NOACTIVATE` 保持 Codex 前景和键盘焦点，内容与主轨文案一致。
+
+### macOS Rail Panel
+
+- **Structure**: non-activating `NSPanel` → SwiftUI `RailView` → brand / quota tracks / reset status。
+- **Variants**: 与 Windows 共用 `ExternalRail` 22px、`CompactRail` 4px、`Hidden` 三种语义。
+- **Z-order**: 使用 Codex 窗口号相对排序；不能安全排序时隐藏，不使用全局浮动置顶。
+- **Typography**: 使用 macOS system font，并严格复用本节字号、字重和行高。
+- **Accessibility**: 只申请辅助功能权限读取目标窗口几何；面板不成为 Key/Main Window，不进入窗口切换器。
+
+### macOS Menu Bar Item
+
+- **Structure**: `NSStatusItem` 模板图标 + 最低可用额度摘要 + 原生 `NSMenu`。
+- **States**: 连接中、实时、陈旧、需登录、不支持、不可用。
+- **Color**: 菜单栏模板图标跟随系统明暗；百分比文字保留额度语义，不给菜单栏图标强加品牌彩色背景。
+- **Interaction**: 菜单使用系统间距、选中态和键盘导航，不自绘网页式菜单。
 
 ## 6. Motion & Interaction
 
 | Type | Duration | Easing | Usage |
 |---|---:|---|---|
 | Focus opacity | 180ms | ease-out | 100% ↔ 52% |
-| Hover delay | 250ms | linear delay | 打开详情卡 |
+| Detail close grace | 160ms | linear delay | 指针从轨道跨到独立详情窗口 |
 | Threshold shimmer | 1200ms | ease-in-out | 首次跨入 50% / 20% |
 | Exhausted marquee | 12s | linear | 仅 0% 循环 |
 
