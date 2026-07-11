@@ -48,6 +48,7 @@ struct RailView: View {
                 .onTapGesture(perform: onClick)
             }
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Color(hexRGBA: theme.surface))
         .clipShape(RoundedRectangle(cornerRadius: mode == .compactRail ? 0 : settings.cornerRadius))
         .overlay {
