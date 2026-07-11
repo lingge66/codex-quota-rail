@@ -1,18 +1,27 @@
 # macOS 验收记录
 
-## 当前自动化证据
+日期：2026-07-11
 
-- Swift 源文件已通过 Tree-sitter Swift 语法树扫描，未发现语法错误节点。
-- Swift Package 清单、JSON、YAML、Info.plist 与 Bash 脚本已完成本地结构校验。
-- Windows 基线 203 项 .NET 测试保持通过。
-- `.github/workflows/macos-ci.yml` 会在 `macos-15` 上执行 Swift 测试、双架构构建、ad-hoc 签名、解包复验和 SHA-256 校验。
+## 已完成证据
 
-## 发布前必须补齐
+- GitHub Actions `macos-15` 使用 Apple Swift 6.1.2，`CodexQuotaKit` 27 项测试全部通过。
+- arm64 与 x86_64 Release 均编译、链接成功，经 `lipo` 合并为 Universal Mach-O；脚本复核两个架构、Info.plist、ad-hoc 签名、ZIP 与 SHA-256。
+- CI 启动真实 `.app` 的 `--rail-preview` 模式，进程持续存活且日志为空；`screencapture` 产出非空 PNG。
+- 截图实测 22px 轨位于模拟 Codex 窗口标题栏外侧：不覆盖红绿灯或标题栏；“5 小时 / 本周”“可用 90% / 58%”中文、数字和进度均无截断。
+- 详情预览实测显示两行额度、重置时间和更新时间；颜色与主轨一致。CI 最终只保留无系统权限提示污染的默认收起截图。
+- Swift 6 严格并发、Accessibility Core Foundation 桥接、图标 ICNS、脚本可执行位与双架构打包问题均已由真实 runner 发现并回归通过。
+- 同一提交的 Windows CI：Release 构建 0 警告、0 错误，203 项带覆盖率测试通过。
 
-- macOS runner 的真实 Swift 编译与测试结果；
-- Apple Silicon 真机启动、辅助功能授权、22px/4px 切换、最小化、Space、失焦和窗口覆盖；
-- Intel 真机或 Intel runner 冒烟；
-- 真实 Codex App Server 额度一致性；
-- 菜单栏、设置、登录项、领哥网站和详情自动收回的截图与操作记录。
+证据入口：
 
-Windows 环境不能替代 AppKit、Accessibility、ServiceManagement 与 Gatekeeper 的真实表面验收。未取得这些证据前，不把 macOS 版本描述为已发布候选。
+- macOS CI：`https://github.com/lingge66/codex-quota-rail/actions/workflows/macos-ci.yml`
+- 开源仓库：`https://github.com/lingge66/codex-quota-rail`
+
+## 仍需物理 Mac 复验
+
+- 在用户自己的 Apple Silicon 与 Intel Mac 上首次打开、Gatekeeper 提示和辅助功能授权；
+- 真实 Codex 窗口的移动、最小化、全屏、Space 切换和多显示器遮挡；
+- 真实 Codex App Server 登录态与额度一致性；
+- `SMAppService` 登录项在重启后的恢复行为。
+
+Windows 环境和托管 runner 不能替代物理 Mac 上的 Gatekeeper、系统设置授权、Space 与真实 Codex 联调。以上限制不影响源码、双架构编译和预览渲染已验证的结论。
