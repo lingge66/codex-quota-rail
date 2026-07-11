@@ -20,6 +20,22 @@
 
 [下载 Windows 与 macOS 预发布包](https://github.com/lingge66/codex-quota-rail/releases/tag/v0.1.0-rc.8)。当前构建未使用商业代码签名，请先核对随包 SHA-256。
 
+## UI 演示
+
+普通窗口下，22px 双额度轨贴在 Codex 窗口顶部外侧；点击额度轨才会临时展开详情卡。
+
+<p align="center">
+  <img src="docs/assets/demo/codex-quota-rail-normal-wide.png" width="49%" alt="Codex 普通窗口顶部外侧的绿色双额度轨">
+  <img src="docs/assets/demo/codex-quota-rail-details-wide.png" width="49%" alt="点击额度轨后展开可用额度详情卡">
+</p>
+
+额度降低时轨道缩短并变为红色；Codex 最大化后自动切换为顶部约 4px 的紧凑额度线。
+
+<p align="center">
+  <img src="docs/assets/demo/codex-quota-rail-low-quota-square.png" width="49%" alt="可用额度降至百分之十八时的红色额度轨">
+  <img src="docs/assets/demo/codex-quota-rail-compact-square.png" width="49%" alt="Codex 最大化时顶部四像素紧凑额度线">
+</p>
+
 ## 从源码运行
 
 ### Windows
