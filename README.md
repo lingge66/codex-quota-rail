@@ -25,17 +25,7 @@ Supported platforms are Windows x64 and macOS 13 or later. A future renderer can
 
 In a normal window, the 22 px dual quota rail stays outside the top edge of Codex. The details card opens only after clicking the rail.
 
-<p align="center">
-  <img src="docs/assets/demo/codex-quota-rail-normal-wide.png" width="49%" alt="Green dual quota rail outside the top edge of a normal Codex window">
-  <img src="docs/assets/demo/codex-quota-rail-details-wide.png" width="49%" alt="Available quota details card opened after clicking the rail">
-</p>
 
-As available quota runs low, the track becomes shorter and red. When Codex is maximized, the rail switches to an approximately 4 px compact line.
-
-<p align="center">
-  <img src="docs/assets/demo/codex-quota-rail-low-quota-square.png" width="49%" alt="Red quota rail showing eighteen percent available">
-  <img src="docs/assets/demo/codex-quota-rail-compact-square.png" width="49%" alt="Four pixel compact quota line in a maximized Codex window">
-</p>
 
 ## Run from source
 
