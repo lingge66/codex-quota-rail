@@ -36,7 +36,9 @@ public sealed class RateLimitSourceTests
     {
         // Given
         await using var fixture = SourceFixture.Create();
+        var initial = fixture.NextSnapshot();
         await fixture.Source.StartAsync(fixture.CancellationToken);
+        await initial.WaitAsync(fixture.CancellationToken);
         fixture.Connection.RateLimitsResult = JsonFixture.RateLimits(20);
         var refreshed = fixture.NextSnapshot();
 
