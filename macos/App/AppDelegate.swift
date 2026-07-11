@@ -322,12 +322,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let title = NSTextField(labelWithString: "Codex 工作区预览")
         title.translatesAutoresizingMaskIntoConstraints = false
         title.font = .systemFont(ofSize: 22, weight: .semibold)
-        title.textColor = .secondaryLabelColor
+        title.textColor = NSColor(calibratedWhite: 0.82, alpha: 1)
         let subtitle = NSTextField(
             labelWithString: "额度轨应贴在这个窗口顶部外侧，不覆盖标题栏功能。")
         subtitle.translatesAutoresizingMaskIntoConstraints = false
         subtitle.font = .systemFont(ofSize: 13)
-        subtitle.textColor = .tertiaryLabelColor
+        subtitle.textColor = NSColor(calibratedWhite: 0.58, alpha: 1)
         content.addSubview(title)
         content.addSubview(subtitle)
         NSLayoutConstraint.activate([

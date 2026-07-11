@@ -43,7 +43,6 @@ jobs:
             wait "$PID" 2>/dev/null || true
           }
           capture_preview artifacts/macos/rail-preview.png
-          capture_preview artifacts/macos/rail-preview-details.png --rail-preview-details
       - name: Upload macOS artifact
         uses: actions/upload-artifact@v4
         with:
@@ -53,5 +52,4 @@ jobs:
             artifacts/macos/SHA256SUMS.txt
             artifacts/macos/VERSION.txt
             artifacts/macos/rail-preview.png
-            artifacts/macos/rail-preview-details.png
             artifacts/macos/rail-preview.log
