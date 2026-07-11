@@ -21,11 +21,12 @@ public sealed class RateLimitSourceTests
         // When
         await fixture.Source.StartAsync(fixture.CancellationToken);
         var snapshot = await snapshotReceived.Task.WaitAsync(fixture.CancellationToken);
+        await fixture.WaitForConnectionStateAsync(QuotaConnectionState.Live);
 
         // Then
         Assert.Equal(["account/read", "account/rateLimits/read"], fixture.Connection.RequestedMethods);
         Assert.Equal(68, snapshot.Primary?.UsedPercent);
-        Assert.Equal(QuotaConnectionState.Live, fixture.ConnectionStates[^1]);
+        Assert.Equal(QuotaConnectionState.Live, fixture.ConnectionStates.Last());
         var launch = Assert.Single(fixture.Factory.LaunchSpecs);
         Assert.Equal(@"C:\tools\codex.exe", launch.FileName);
         Assert.Equal(["app-server", "--listen", "stdio://"], launch.Arguments);
@@ -58,7 +59,9 @@ public sealed class RateLimitSourceTests
     {
         // Given
         await using var fixture = SourceFixture.Create();
+        var initial = fixture.NextSnapshot();
         await fixture.Source.StartAsync(fixture.CancellationToken);
+        await initial.WaitAsync(fixture.CancellationToken);
         fixture.Time.Advance(TimeSpan.FromSeconds(59));
 
         // When
@@ -90,11 +93,9 @@ public sealed class RateLimitSourceTests
         fixture.Time.Advance(TimeSpan.FromSeconds(2));
         await recovered.WaitAsync(fixture.CancellationToken);
         recoveredConnection.NextRateLimitException = new IOException("private raw failure");
-        var stale = fixture.NextConnectionState();
+        var stale = fixture.WaitForConnectionStateAsync(QuotaConnectionState.Stale);
         await fixture.Source.RefreshAsync(fixture.CancellationToken);
-        Assert.Equal(
-            QuotaConnectionState.Stale,
-            await stale.WaitAsync(fixture.CancellationToken));
+        await stale;
         fixture.Time.Advance(TimeSpan.FromSeconds(1));
         var beforeResetDelay = fixture.Factory.CreateCount;
         fixture.Time.Advance(TimeSpan.FromSeconds(1));
@@ -138,7 +139,9 @@ public sealed class RateLimitSourceTests
     {
         // Given
         await using var fixture = SourceFixture.Create();
+        var initial = fixture.NextSnapshot();
         await fixture.Source.StartAsync(fixture.CancellationToken);
+        await initial.WaitAsync(fixture.CancellationToken);
         fixture.Availability.Pause();
 
         // When
@@ -169,7 +172,7 @@ public sealed class RateLimitSourceTests
 
         // Then
         Assert.Equal(["account/read"], connection.RequestedMethods);
-        Assert.Equal(QuotaConnectionState.AuthenticationRequired, fixture.ConnectionStates[^1]);
+        await fixture.WaitForConnectionStateAsync(QuotaConnectionState.AuthenticationRequired);
     }
 
     [Fact]
@@ -210,7 +213,7 @@ public sealed class RateLimitSourceTests
         await fixture.Source.StartAsync(fixture.CancellationToken);
 
         // Then
-        Assert.Equal(QuotaConnectionState.Unsupported, fixture.ConnectionStates[^1]);
+        await fixture.WaitForConnectionStateAsync(QuotaConnectionState.Unsupported);
         Assert.Equal(0, fixture.Factory.CreateCount);
     }
 }

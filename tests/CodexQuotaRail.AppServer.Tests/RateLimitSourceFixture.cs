@@ -9,7 +9,7 @@ namespace CodexQuotaRail.AppServer.Tests;
 internal sealed class SourceFixture : IAsyncDisposable
 {
     private readonly ConcurrentQueue<TaskCompletionSource<RawQuotaSnapshot>> _snapshotWaiters = new();
-    private readonly ConcurrentQueue<TaskCompletionSource<QuotaConnectionState>> _connectionWaiters = new();
+    private readonly ConcurrentDictionary<QuotaConnectionState, TaskCompletionSource> _connectionSignals = new();
     private readonly CancellationTokenSource _timeout = new(TimeSpan.FromSeconds(10));
 
     private SourceFixture(
@@ -26,11 +26,10 @@ internal sealed class SourceFixture : IAsyncDisposable
         Connection = connection;
         Source.ConnectionChanged += (_, state) =>
         {
-            ConnectionStates.Add(state);
-            if (_connectionWaiters.TryDequeue(out var waiter))
-            {
-                waiter.TrySetResult(state);
-            }
+            ConnectionStates.Enqueue(state);
+            _connectionSignals
+                .GetOrAdd(state, static _ => NewSignal())
+                .TrySetResult();
         };
         Source.SnapshotChanged += (_, snapshot) =>
         {
@@ -47,7 +46,7 @@ internal sealed class SourceFixture : IAsyncDisposable
 
     public FakeRateLimitConnection Connection { get; }
 
-    public List<QuotaConnectionState> ConnectionStates { get; } = [];
+    public ConcurrentQueue<QuotaConnectionState> ConnectionStates { get; } = new();
 
     public FakeRateLimitConnectionFactory Factory { get; }
 
@@ -101,13 +100,11 @@ internal sealed class SourceFixture : IAsyncDisposable
         return waiter.Task;
     }
 
-    public Task<QuotaConnectionState> NextConnectionState()
-    {
-        var waiter = new TaskCompletionSource<QuotaConnectionState>(
-            TaskCreationOptions.RunContinuationsAsynchronously);
-        _connectionWaiters.Enqueue(waiter);
-        return waiter.Task;
-    }
+    public Task WaitForConnectionStateAsync(QuotaConnectionState state) =>
+        _connectionSignals
+            .GetOrAdd(state, static _ => NewSignal())
+            .Task
+            .WaitAsync(CancellationToken);
 
     public Task WaitForFactoryCountAsync(int expected) =>
         Factory.WaitForCreateCountAsync(expected, CancellationToken);
@@ -117,6 +114,9 @@ internal sealed class SourceFixture : IAsyncDisposable
         await Source.DisposeAsync();
         _timeout.Dispose();
     }
+
+    private static TaskCompletionSource NewSignal() =>
+        new(TaskCreationOptions.RunContinuationsAsynchronously);
 }
 
 internal sealed class FakeRateLimitConnectionFactory(
