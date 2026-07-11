@@ -1,12 +1,14 @@
+using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Automation;
 using System.Windows.Controls.Primitives;
+using System.Windows.Interop;
 using CodexQuotaRail.App.Rail;
 using CodexQuotaRail.App.Settings;
 
 namespace CodexQuotaRail.App.Tests;
 
-public sealed class AccessibilityStateTests
+public sealed partial class AccessibilityStateTests
 {
     [Fact]
     public async Task SystemAnimationSettingBecomesDefaultUntilUserChooses()
@@ -86,19 +88,83 @@ public sealed class AccessibilityStateTests
                     var window = new RailWindow();
                     var root = (FrameworkElement)window.FindName("RootBorder");
                     var popup = (Popup)window.FindName("DetailsPopup");
+                    var startsTopmost = window.Topmost;
                     var popupChild = (FrameworkElement)popup.Child;
                     popupChild.LayoutTransform = new System.Windows.Media.ScaleTransform(2, 2);
                     popupChild.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
+                    window.Left = -10_000;
+                    window.Top = -10_000;
+                    var ownerWindow = new Window
+                    {
+                        Left = -10_000,
+                        Top = -10_000,
+                        Width = 800,
+                        Height = 600,
+                        ShowInTaskbar = false,
+                    };
+                    ownerWindow.Show();
+                    var ownerHandle = new WindowInteropHelper(ownerWindow).Handle;
+                    window.Show();
+                    var railHandle = new WindowInteropHelper(window).Handle;
+                    var mouseActivateResult = SendMessage(railHandle, 0x0021, 0, 0);
+                    window.QueuePlacement(
+                        new CodexQuotaRail.Windows.Overlay.OverlayPlacement(
+                            new CodexQuotaRail.Windows.Windows.PixelRect(-10_000, -10_000, 800, 22),
+                            CodexQuotaRail.Windows.Overlay.OverlayMode.ExternalRail,
+                            1),
+                        dpiScale: 1,
+                        ownerHandle: ownerHandle);
+                    var mousePosition = new nint((11 << 16) | 400);
+                    SendMessage(railHandle, 0x0201, 1, mousePosition);
+                    SendMessage(railHandle, 0x0202, 0, mousePosition);
+                    var nativeClickOpenedDetails = popup.IsOpen;
+                    popup.IsOpen = true;
+                    window.QueuePlacement(
+                        new CodexQuotaRail.Windows.Overlay.OverlayPlacement(
+                            new CodexQuotaRail.Windows.Windows.PixelRect(-10_000, -10_000, 1920, 4),
+                            CodexQuotaRail.Windows.Overlay.OverlayMode.CompactTitleBar,
+                            1),
+                        dpiScale: 1,
+                        ownerHandle: ownerHandle);
+                    var compactPlacementClosedDetails = !popup.IsOpen;
+                    popup.IsOpen = true;
+                    window.QueuePlacement(
+                        new CodexQuotaRail.Windows.Overlay.OverlayPlacement(
+                            new CodexQuotaRail.Windows.Windows.PixelRect(100, 78, 800, 22),
+                            CodexQuotaRail.Windows.Overlay.OverlayMode.ExternalRail,
+                            0.52),
+                        dpiScale: 1,
+                        ownerHandle: ownerHandle);
+                    var detailsClosedWhenUnfocused = !popup.IsOpen;
+                    SendMessage(railHandle, 0x0201, 1, mousePosition);
+                    SendMessage(railHandle, 0x0202, 0, mousePosition);
+                    var unfocusedRailClickOpenedDetails = popup.IsOpen;
+                    window.QueuePlacement(
+                        new CodexQuotaRail.Windows.Overlay.OverlayPlacement(
+                            new CodexQuotaRail.Windows.Windows.PixelRect(-10_000, -10_000, 1920, 4),
+                            CodexQuotaRail.Windows.Overlay.OverlayMode.CompactTitleBar,
+                            1),
+                        dpiScale: 1,
+                        ownerHandle: ownerHandle);
                     result.TrySetResult(
                         new RailAccessibilityResult(
                             window.ShowActivated,
                             window.ShowInTaskbar,
-                            window.Topmost,
+                            startsTopmost,
                             window.Focusable,
                             AutomationProperties.GetName(root),
                             popup.Focusable,
-                            popupChild.DesiredSize.Height));
+                            popup.StaysOpen,
+                            popupChild.DesiredSize.Height,
+                            MouseClickDoesNotActivate: mouseActivateResult == 3,
+                            nativeClickOpenedDetails,
+                            unfocusedRailClickOpenedDetails,
+                            compactPlacementClosedDetails,
+                            detailsClosedWhenUnfocused,
+                            RailOwnsTrackedWindow: GetWindow(railHandle, 4) == ownerHandle,
+                            RailIsNotGloballyTopmost: !window.Topmost));
                     window.Close();
+                    ownerWindow.Close();
                 }
                 catch (Exception error)
                 {
@@ -115,7 +181,15 @@ public sealed class AccessibilityStateTests
         Assert.False(state.Focusable);
         Assert.Equal("Codex 可用额度", state.AutomationName);
         Assert.False(state.PopupFocusable);
+        Assert.True(state.PopupUsesExplicitClosePolicy);
         Assert.True(state.ScaledDetailHeight > 60);
+        Assert.True(state.MouseClickDoesNotActivate);
+        Assert.True(state.NativeClickOpenedDetails);
+        Assert.True(state.UnfocusedRailClickOpenedDetails);
+        Assert.True(state.CompactPlacementClosedDetails);
+        Assert.True(state.DetailsClosedWhenUnfocused);
+        Assert.True(state.RailOwnsTrackedWindow);
+        Assert.True(state.RailIsNotGloballyTopmost);
         Assert.True(thread.Join(TimeSpan.FromSeconds(2)));
     }
 
@@ -126,5 +200,23 @@ public sealed class AccessibilityStateTests
         bool Focusable,
         string AutomationName,
         bool PopupFocusable,
-        double ScaledDetailHeight);
+        bool PopupUsesExplicitClosePolicy,
+        double ScaledDetailHeight,
+        bool MouseClickDoesNotActivate,
+        bool NativeClickOpenedDetails,
+        bool UnfocusedRailClickOpenedDetails,
+        bool CompactPlacementClosedDetails,
+        bool DetailsClosedWhenUnfocused,
+        bool RailOwnsTrackedWindow,
+        bool RailIsNotGloballyTopmost);
+
+    [DllImport("user32.dll")]
+    private static extern nint GetWindow(nint handle, uint command);
+
+    [DllImport("user32.dll")]
+    private static extern nint SendMessage(
+        nint handle,
+        uint message,
+        nint wordParameter,
+        nint longParameter);
 }

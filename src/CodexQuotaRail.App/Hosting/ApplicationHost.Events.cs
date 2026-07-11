@@ -187,6 +187,9 @@ public sealed partial class ApplicationHost
                 case TrayCommand.Troubleshoot:
                     _actions.ShowTroubleshooting();
                     break;
+                case TrayCommand.OpenLingGeWebsite:
+                    _actions.OpenLingGeWebsite();
+                    break;
                 case TrayCommand.Exit:
                     _actions.RequestExit();
                     break;

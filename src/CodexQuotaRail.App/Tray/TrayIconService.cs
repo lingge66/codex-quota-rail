@@ -32,6 +32,7 @@ public enum TrayCommand
     CheckUpdates,
     OpenLogs,
     Troubleshoot,
+    OpenLingGeWebsite,
     Exit,
 }
 
@@ -146,6 +147,7 @@ public sealed class TrayIconService : ITrayIconService
             new("check-updates", "检查更新"),
             new("open-logs", "打开日志目录"),
             new("troubleshoot", "故障排查"),
+            new("open-lingge-website", "领哥个人网站"),
             Separator("separator-3"),
             new("exit", "退出"),
         ];
@@ -174,6 +176,7 @@ public sealed class TrayIconService : ITrayIconService
             "check-updates" => new TrayCommandRequest(TrayCommand.CheckUpdates),
             "open-logs" => new TrayCommandRequest(TrayCommand.OpenLogs),
             "troubleshoot" => new TrayCommandRequest(TrayCommand.Troubleshoot),
+            "open-lingge-website" => new TrayCommandRequest(TrayCommand.OpenLingGeWebsite),
             "exit" => new TrayCommandRequest(TrayCommand.Exit),
             _ => null,
         };

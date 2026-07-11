@@ -5,15 +5,17 @@ namespace CodexQuotaRail.App.Tray;
 
 public sealed class WindowsFormsTrayIconHost : ITrayIconHost
 {
+    private readonly Icon _icon;
     private readonly NotifyIcon _notifyIcon;
     private ContextMenuStrip? _menu;
     private int _disposed;
 
     public WindowsFormsTrayIconHost()
     {
+        _icon = ApplicationIconLoader.Load(Environment.ProcessPath);
         _notifyIcon = new NotifyIcon
         {
-            Icon = SystemIcons.Application,
+            Icon = _icon,
             Text = "Codex 可用额度",
             Visible = true,
         };
@@ -61,6 +63,7 @@ public sealed class WindowsFormsTrayIconHost : ITrayIconHost
         _notifyIcon.ContextMenuStrip = null;
         _menu?.Dispose();
         _notifyIcon.Dispose();
+        _icon.Dispose();
     }
 
     private ToolStripItem CreateItem(TrayMenuItemModel model)

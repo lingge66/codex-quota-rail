@@ -152,7 +152,11 @@ public sealed partial class ApplicationHost : IAsyncDisposable
         var placement = _window is null
             ? HiddenPlacement
             : OverlayPlacementCalculator.Calculate(_window);
-        _overlay.Present(_display, placement, _window?.DpiScale ?? 1);
+        _overlay.Present(
+            _display,
+            placement,
+            _window?.DpiScale ?? 1,
+            _window?.Handle ?? 0);
         _tray?.UpdateState(CreateTrayState());
     }
 

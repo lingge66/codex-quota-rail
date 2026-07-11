@@ -19,7 +19,8 @@ public interface IOverlayPresenter : IDisposable
     void Present(
         QuotaDisplayState state,
         OverlayPlacement placement,
-        double dpiScale);
+        double dpiScale,
+        nint ownerHandle);
 }
 
 public interface IApplicationActions
@@ -27,6 +28,8 @@ public interface IApplicationActions
     void CheckForUpdates();
 
     void OpenLogs();
+
+    void OpenLingGeWebsite();
 
     void ShowTroubleshooting();
 

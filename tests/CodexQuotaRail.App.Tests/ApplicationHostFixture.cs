@@ -54,9 +54,9 @@ internal sealed class ApplicationHostFixture : IAsyncDisposable
 
     public FakeOverlayPresenter Overlay { get; }
 
-    private FakeAutostartService Autostart { get; } = new();
+    public FakeAutostartService Autostart { get; } = new();
 
-    private FakeApplicationActions Actions { get; } = new();
+    public FakeApplicationActions Actions { get; } = new();
 
     public FakeUiDispatcher Dispatcher { get; } = new();
 
@@ -74,31 +74,45 @@ internal sealed class ApplicationHostFixture : IAsyncDisposable
             null,
             DateTimeOffset.UtcNow);
 
-    private sealed class FakeApplicationActions : IApplicationActions
+    internal sealed class FakeApplicationActions : IApplicationActions
     {
+        public List<TrayCommand> Invoked { get; } = [];
+
         public void CheckForUpdates()
         {
+            Invoked.Add(TrayCommand.CheckUpdates);
         }
 
         public void OpenLogs()
         {
+            Invoked.Add(TrayCommand.OpenLogs);
+        }
+
+        public void OpenLingGeWebsite()
+        {
+            Invoked.Add(TrayCommand.OpenLingGeWebsite);
         }
 
         public void RequestExit()
         {
+            Invoked.Add(TrayCommand.Exit);
         }
 
         public void ShowTroubleshooting()
         {
+            Invoked.Add(TrayCommand.Troubleshoot);
         }
     }
 
-    private sealed class FakeAutostartService : IAutostartService
+    internal sealed class FakeAutostartService : IAutostartService
     {
+        public List<bool> SetValues { get; } = [];
+
         public bool IsEnabled() => false;
 
         public void SetEnabled(bool enabled)
         {
+            SetValues.Add(enabled);
         }
     }
 
@@ -205,6 +219,8 @@ internal sealed class ApplicationHostFixture : IAsyncDisposable
 
         public int DisposeCount { get; private set; }
 
+        public int RefreshCount { get; private set; }
+
         public ValueTask DisposeAsync()
         {
             DisposeCount++;
@@ -218,7 +234,11 @@ internal sealed class ApplicationHostFixture : IAsyncDisposable
         public void EmitSnapshot(RawQuotaSnapshot snapshot) =>
             SnapshotChanged?.Invoke(this, snapshot);
 
-        public Task RefreshAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+        public Task RefreshAsync(CancellationToken cancellationToken)
+        {
+            RefreshCount++;
+            return Task.CompletedTask;
+        }
 
         public Task StartAsync(CancellationToken cancellationToken)
         {
@@ -286,15 +306,18 @@ internal sealed class ApplicationHostFixture : IAsyncDisposable
         public void Present(
             QuotaDisplayState state,
             OverlayPlacement placement,
-            double dpiScale)
+            double dpiScale,
+            nint ownerHandle)
         {
-            Presentations.Add(new Presentation(state, placement, dispatcher.IsDispatching));
+            Presentations.Add(
+                new Presentation(state, placement, ownerHandle, dispatcher.IsDispatching));
             order.Add("overlay:present");
         }
 
         public sealed record Presentation(
             QuotaDisplayState State,
             OverlayPlacement Placement,
+            nint OwnerHandle,
             bool WasDispatched);
     }
 

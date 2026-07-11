@@ -18,6 +18,7 @@ public sealed class ApplicationHostTests
         var first = Assert.Single(fixture.Overlay.Presentations);
         Assert.Equal(QuotaConnectionState.Connecting, first.State.Connection);
         Assert.Equal("正在连接 Codex", first.State.Message);
+        Assert.Equal((nint)1, first.OwnerHandle);
         Assert.True(first.WasDispatched);
         Assert.True(
             fixture.Order.IndexOf("overlay:present") <
@@ -89,6 +90,46 @@ public sealed class ApplicationHostTests
         Assert.True(Assert.Single(fixture.SettingsStore.Saved).ReduceMotion);
         Assert.True(fixture.Overlay.AppliedSettings[^1].ReduceMotion);
         Assert.True(fixture.TrayFactory.Created.States[^1].ReduceMotion);
+    }
+
+    [Fact]
+    public async Task EveryNonSettingTrayCommandReachesItsApplicationAction()
+    {
+        await using var fixture = new ApplicationHostFixture();
+        await fixture.Host.StartAsync(CancellationToken.None);
+
+        fixture.TrayFactory.Created!.Emit(new TrayCommandRequest(TrayCommand.Refresh));
+        fixture.TrayFactory.Created.Emit(new TrayCommandRequest(TrayCommand.CheckUpdates));
+        fixture.TrayFactory.Created.Emit(new TrayCommandRequest(TrayCommand.OpenLogs));
+        fixture.TrayFactory.Created.Emit(new TrayCommandRequest(TrayCommand.Troubleshoot));
+        fixture.TrayFactory.Created.Emit(new TrayCommandRequest(TrayCommand.OpenLingGeWebsite));
+        fixture.TrayFactory.Created.Emit(new TrayCommandRequest(TrayCommand.Exit));
+        await fixture.Host.WhenIdleAsync();
+
+        Assert.Equal(1, fixture.RateSource.RefreshCount);
+        Assert.Equal(
+            [
+                TrayCommand.CheckUpdates,
+                TrayCommand.OpenLogs,
+                TrayCommand.Troubleshoot,
+                TrayCommand.OpenLingGeWebsite,
+                TrayCommand.Exit,
+            ],
+            fixture.Actions.Invoked);
+    }
+
+    [Fact]
+    public async Task AutostartClickUpdatesWindowsAndPersistsTheSetting()
+    {
+        await using var fixture = new ApplicationHostFixture();
+        await fixture.Host.StartAsync(CancellationToken.None);
+
+        fixture.TrayFactory.Created!.Emit(
+            new TrayCommandRequest(TrayCommand.SetAutostart, BooleanValue: true));
+        await fixture.Host.WhenIdleAsync();
+
+        Assert.Equal([true], fixture.Autostart.SetValues);
+        Assert.True(Assert.Single(fixture.SettingsStore.Saved).StartWithWindows);
     }
 
     [Fact]

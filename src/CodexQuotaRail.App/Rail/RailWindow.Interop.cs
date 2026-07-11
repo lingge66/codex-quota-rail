@@ -6,17 +6,74 @@ namespace CodexQuotaRail.App.Rail;
 
 public partial class RailWindow
 {
+    private const int GwlHwndParent = -8;
     private const int GwlExStyle = -20;
+    private const int MaNoActivate = 3;
+    private const int WmMouseActivate = 0x0021;
+    private const int WmLeftButtonUp = 0x0202;
     private const long WsExNoActivate = 0x08000000L;
     private const long WsExToolWindow = 0x00000080L;
+    private nint _nativeHandle;
+    private nint _ownerHandle;
+    private HwndSource? _windowMessageSource;
 
     protected override void OnSourceInitialized(EventArgs e)
     {
         base.OnSourceInitialized(e);
-        var handle = new WindowInteropHelper(this).Handle;
-        var extendedStyle = GetWindowLongPtr(handle, GwlExStyle);
+        _nativeHandle = new WindowInteropHelper(this).Handle;
+        _windowMessageSource = HwndSource.FromHwnd(_nativeHandle);
+        _windowMessageSource?.AddHook(OnWindowMessage);
+        var extendedStyle = GetWindowLongPtr(_nativeHandle, GwlExStyle);
         var nextStyle = extendedStyle | new nint(WsExToolWindow | WsExNoActivate);
-        SetWindowLongPtrChecked(handle, GwlExStyle, nextStyle);
+        SetWindowLongPtrChecked(_nativeHandle, GwlExStyle, nextStyle);
+        ApplyOwnerWindow();
+    }
+
+    private nint OnWindowMessage(
+        nint handle,
+        int message,
+        nint wordParameter,
+        nint longParameter,
+        ref bool handled)
+    {
+        if (message == WmMouseActivate)
+        {
+            handled = true;
+            return MaNoActivate;
+        }
+
+        if (message == WmLeftButtonUp)
+        {
+            ToggleDetails();
+            handled = true;
+        }
+
+        return 0;
+    }
+
+    private void RemoveWindowMessageHook()
+    {
+        _windowMessageSource?.RemoveHook(OnWindowMessage);
+        _windowMessageSource = null;
+    }
+
+    private void SetOwnerWindow(nint ownerHandle)
+    {
+        if (_ownerHandle == ownerHandle)
+        {
+            return;
+        }
+
+        _ownerHandle = ownerHandle;
+        ApplyOwnerWindow();
+    }
+
+    private void ApplyOwnerWindow()
+    {
+        if (_nativeHandle != 0)
+        {
+            SetWindowLongPtrChecked(_nativeHandle, GwlHwndParent, _ownerHandle);
+        }
     }
 
     private static nint GetWindowLongPtr(nint handle, int index) =>

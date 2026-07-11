@@ -26,8 +26,9 @@ Var RemoveSettingsCheckbox
 Var RemoveSettingsState
 
 !define MUI_ABORTWARNING
-!define MUI_ICON "${NSISDIR}\Contrib\Graphics\Icons\modern-install.ico"
-!define MUI_UNICON "${NSISDIR}\Contrib\Graphics\Icons\modern-uninstall.ico"
+!define PRODUCT_ICON "${__FILEDIR__}\..\..\src\CodexQuotaRail.App\Assets\LingGe.ico"
+!define MUI_ICON "${PRODUCT_ICON}"
+!define MUI_UNICON "${PRODUCT_ICON}"
 !define MUI_STARTMENUPAGE_REGISTRY_ROOT "HKCU"
 !define MUI_STARTMENUPAGE_REGISTRY_KEY "Software\CodexQuotaRail"
 !define MUI_STARTMENUPAGE_REGISTRY_VALUENAME "StartMenuFolder"

@@ -10,15 +10,21 @@ namespace CodexQuotaRail.App.Hosting;
 public sealed class DesktopApplicationActions : IApplicationActions
 {
     private static readonly HttpClient UpdateHttpClient = new();
+    private static readonly Uri LingGeWebsite = new("https://lingge66.pages.dev/");
     private readonly string _logDirectory;
+    private readonly Action<Uri> _openExternalUri;
     private readonly Action _requestExit;
 
-    public DesktopApplicationActions(string logDirectory, Action requestExit)
+    public DesktopApplicationActions(
+        string logDirectory,
+        Action requestExit,
+        Action<Uri>? openExternalUri = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(logDirectory);
         ArgumentNullException.ThrowIfNull(requestExit);
         _logDirectory = Path.GetFullPath(logDirectory);
         _requestExit = requestExit;
+        _openExternalUri = openExternalUri ?? OpenExternalUri;
     }
 
     public void CheckForUpdates() => _ = CheckForUpdatesAsync();
@@ -35,6 +41,8 @@ public sealed class DesktopApplicationActions : IApplicationActions
         _ = Process.Start(startInfo);
     }
 
+    public void OpenLingGeWebsite() => _openExternalUri(LingGeWebsite);
+
     public void ShowTroubleshooting() => System.Windows.MessageBox.Show(
         "排查建议：\n1. 确认 Codex 已启动并已登录。\n2. 从托盘选择“立即刷新”。\n3. 如仍不可用，请打开日志目录。",
         "Codex 额度故障排查",
@@ -42,6 +50,20 @@ public sealed class DesktopApplicationActions : IApplicationActions
         MessageBoxImage.Information);
 
     public void RequestExit() => _requestExit();
+
+    private static void OpenExternalUri(Uri uri)
+    {
+        if (!uri.IsAbsoluteUri || uri.Scheme != Uri.UriSchemeHttps)
+        {
+            throw new InvalidOperationException("只允许使用 HTTPS 打开外部网站。");
+        }
+
+        _ = Process.Start(
+            new ProcessStartInfo(uri.AbsoluteUri)
+            {
+                UseShellExecute = true,
+            });
+    }
 
     private static async Task CheckForUpdatesAsync()
     {

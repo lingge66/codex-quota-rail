@@ -40,13 +40,14 @@ public sealed class RailOverlayPresenter : IOverlayPresenter
     public void Present(
         QuotaDisplayState state,
         OverlayPlacement placement,
-        double dpiScale)
+        double dpiScale,
+        nint ownerHandle)
     {
         ArgumentNullException.ThrowIfNull(state);
         ArgumentNullException.ThrowIfNull(placement);
         ObjectDisposedException.ThrowIf(Volatile.Read(ref _disposed) != 0, this);
         _renderer.Render(state, placement.Mode);
-        _window.QueuePlacement(placement, dpiScale);
+        _window.QueuePlacement(placement, dpiScale, ownerHandle);
     }
 
     public void Dispose()
@@ -78,8 +79,12 @@ public sealed class RailOverlayPresenter : IOverlayPresenter
             dictionary => dictionary.Source?.OriginalString.Contains(
                 "Theme.",
                 StringComparison.OrdinalIgnoreCase) is true);
-        var source = new Uri($"Resources/{fileName}", UriKind.Relative);
-        if (current is not null && current.Source == source)
+        var source = new Uri(
+            $"/CodexQuotaRail.App;component/Resources/{fileName}",
+            UriKind.Relative);
+        if (current?.Source?.OriginalString.EndsWith(
+                fileName,
+                StringComparison.OrdinalIgnoreCase) is true)
         {
             return;
         }

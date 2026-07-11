@@ -4,13 +4,11 @@ using System.Windows.Media;
 using System.Windows.Media.Animation;
 using System.Windows.Threading;
 using CodexQuotaRail.Windows.Overlay;
-using MouseEventArgs = System.Windows.Input.MouseEventArgs;
 
 namespace CodexQuotaRail.App.Rail;
 
 public partial class RailWindow : Window
 {
-    private readonly DispatcherTimer _hoverTimer;
     private PendingPlacement? _pendingPlacement;
     private bool _closed;
     private double _lastDpiScale = 1;
@@ -25,22 +23,25 @@ public partial class RailWindow : Window
         DataContext = ViewModel;
         _shimmerVersion = ViewModel.ShimmerVersion;
         ViewModel.PropertyChanged += OnViewModelPropertyChanged;
-        _hoverTimer = new DispatcherTimer(DispatcherPriority.Background, Dispatcher)
+        _closeDetailsTimer = new DispatcherTimer(DispatcherPriority.Input, Dispatcher)
         {
-            Interval = TimeSpan.FromMilliseconds(250),
+            Interval = DetailCloseGrace,
         };
-        _hoverTimer.Tick += OnHoverDelayElapsed;
+        _closeDetailsTimer.Tick += OnCloseDetailsDelayElapsed;
     }
 
     public RailViewModel ViewModel { get; }
 
-    public void QueuePlacement(OverlayPlacement placement, double dpiScale)
+    public void QueuePlacement(
+        OverlayPlacement placement,
+        double dpiScale,
+        nint ownerHandle = 0)
     {
         ArgumentNullException.ThrowIfNull(placement);
         if (!Dispatcher.CheckAccess())
         {
             _ = Dispatcher.BeginInvoke(
-                () => QueuePlacement(placement, dpiScale),
+                () => QueuePlacement(placement, dpiScale, ownerHandle),
                 DispatcherPriority.Render);
             return;
         }
@@ -51,6 +52,13 @@ public partial class RailWindow : Window
         }
 
         var normalizedScale = double.IsFinite(dpiScale) && dpiScale > 0 ? dpiScale : 1.0;
+        SetOwnerWindow(ownerHandle);
+        if (!CanKeepDetailsOpen(placement) ||
+            (_lastPlacement is { } previous && previous.Bounds != placement.Bounds))
+        {
+            CloseDetails();
+        }
+
         _lastPlacement = placement;
         _lastDpiScale = normalizedScale;
         _pendingPlacement = new PendingPlacement(placement, normalizedScale);
@@ -66,8 +74,9 @@ public partial class RailWindow : Window
     protected override void OnClosed(EventArgs e)
     {
         _closed = true;
-        _hoverTimer.Stop();
-        _hoverTimer.Tick -= OnHoverDelayElapsed;
+        _closeDetailsTimer.Stop();
+        _closeDetailsTimer.Tick -= OnCloseDetailsDelayElapsed;
+        RemoveWindowMessageHook();
         ViewModel.PropertyChanged -= OnViewModelPropertyChanged;
         CompositionTarget.Rendering -= OnCompositionRendering;
         base.OnClosed(e);
@@ -82,7 +91,7 @@ public partial class RailWindow : Window
             return;
         }
 
-        QueuePlacement(placement, newDpi.DpiScaleX);
+        QueuePlacement(placement, newDpi.DpiScaleX, _ownerHandle);
     }
 
     private void OnCompositionRendering(object? sender, EventArgs eventArgs)
@@ -104,7 +113,7 @@ public partial class RailWindow : Window
         var placement = pending.Placement;
         if (placement.Mode == OverlayMode.Hidden)
         {
-            DetailsPopup.IsOpen = false;
+            CloseDetails();
             if (IsVisible)
             {
                 Hide();
@@ -208,40 +217,6 @@ public partial class RailWindow : Window
         {
             transform.BeginAnimation(TranslateTransform.XProperty, null);
             transform.X = 0;
-        }
-    }
-
-    private void OnRailMouseEnter(object sender, MouseEventArgs eventArgs)
-    {
-        _hoverTimer.Stop();
-        _hoverTimer.Start();
-    }
-
-    private void OnRailMouseLeave(object sender, MouseEventArgs eventArgs)
-    {
-        _hoverTimer.Stop();
-        _ = Dispatcher.BeginInvoke(
-            CloseDetailsIfPointerLeft,
-            DispatcherPriority.Background);
-    }
-
-    private void OnHoverDelayElapsed(object? sender, EventArgs eventArgs)
-    {
-        _hoverTimer.Stop();
-        if (RootBorder.IsMouseOver && !_closed)
-        {
-            DetailsPopup.IsOpen = true;
-        }
-    }
-
-    private void OnDetailsMouseLeave(object sender, MouseEventArgs eventArgs) =>
-        CloseDetailsIfPointerLeft();
-
-    private void CloseDetailsIfPointerLeft()
-    {
-        if (!RootBorder.IsMouseOver && !DetailsPopup.IsMouseOver)
-        {
-            DetailsPopup.IsOpen = false;
         }
     }
 

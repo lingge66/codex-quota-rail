@@ -21,7 +21,7 @@
             <Setter Property="Height" Value="{StaticResource Rail.TrackHeight}" />
             <Setter Property="Maximum" Value="100" />
             <Setter Property="BorderThickness" Value="0" />
-            <Setter Property="Background" Value="{StaticResource Rail.TrackBase}" />
+            <Setter Property="Background" Value="{DynamicResource Rail.TrackBase}" />
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="{x:Type ProgressBar}">
@@ -79,7 +79,7 @@
                                FontFamily="{StaticResource Rail.Font.Primary}"
                                FontSize="{StaticResource Rail.FontSize.Label}"
                                FontWeight="SemiBold"
-                               Foreground="{StaticResource Rail.TextSecondary}"
+                               Foreground="{DynamicResource Rail.TextSecondary}"
                                Text="{Binding Label}"
                                TextTrimming="CharacterEllipsis" />
                     <TextBlock Margin="{StaticResource Rail.InlineGap}"
@@ -87,7 +87,7 @@
                                DockPanel.Dock="Right"
                                FontFamily="{StaticResource Rail.Font.Primary}"
                                FontSize="{StaticResource Rail.FontSize.Metadata}"
-                               Foreground="{StaticResource Rail.TextSecondary}"
+                               Foreground="{DynamicResource Rail.TextSecondary}"
                                Text="{Binding ResetText}"
                                Visibility="{Binding DataContext.ShowResetText,
                                                     RelativeSource={RelativeSource AncestorType={x:Type local:RailWindow}},
@@ -159,8 +159,8 @@
                 MouseLeave="OnRailMouseLeave">
             <Border.Style>
                 <Style TargetType="{x:Type Border}">
-                    <Setter Property="Background" Value="{StaticResource Rail.Surface}" />
-                    <Setter Property="BorderBrush" Value="{StaticResource Rail.BorderSubtle}" />
+                    <Setter Property="Background" Value="{DynamicResource Rail.Surface}" />
+                    <Setter Property="BorderBrush" Value="{DynamicResource Rail.BorderSubtle}" />
                     <Setter Property="BorderThickness" Value="1" />
                     <Setter Property="CornerRadius" Value="{StaticResource Rail.RootCornerRadius}" />
                     <Style.Triggers>
@@ -185,7 +185,7 @@
                                FontFamily="{StaticResource Rail.Font.Mono}"
                                FontSize="{StaticResource Rail.FontSize.Label}"
                                FontWeight="SemiBold"
-                               Foreground="{StaticResource Rail.TextSecondary}"
+                               Foreground="{DynamicResource Rail.TextSecondary}"
                                Text="CODEX"
                                Visibility="{Binding ShowTrackText, Converter={StaticResource BooleanToVisibility}}" />
                     <Grid Grid.Column="1">
@@ -216,7 +216,7 @@
                                    FontFamily="{StaticResource Rail.Font.Primary}"
                                    FontSize="{StaticResource Rail.FontSize.Value}"
                                    FontWeight="SemiBold"
-                                   Foreground="{StaticResource Rail.TextSecondary}"
+                                   Foreground="{DynamicResource Rail.TextSecondary}"
                                    Text="{Binding StatusText}">
                             <TextBlock.Style>
                                 <Style TargetType="{x:Type TextBlock}">
@@ -255,7 +255,7 @@
                         Width="{StaticResource Rail.ShimmerWidth}"
                         HorizontalAlignment="Left"
                         Opacity="0"
-                        Background="{StaticResource Rail.Shimmer}"
+                        Background="{DynamicResource Rail.Shimmer}"
                         IsHitTestVisible="False">
                     <Border.RenderTransform>
                         <TranslateTransform />
@@ -269,20 +269,22 @@
                Focusable="False"
                Placement="Bottom"
                PlacementTarget="{Binding ElementName=RootBorder}"
-               StaysOpen="False"
-               MouseLeave="OnDetailsMouseLeave">
-            <Border MinWidth="{StaticResource Rail.DetailMinWidth}"
+               StaysOpen="True">
+            <Border x:Name="DetailsPanel"
+                    MinWidth="{StaticResource Rail.DetailMinWidth}"
                     Padding="{StaticResource Rail.DetailPadding}"
-                    Background="{StaticResource Rail.DetailSurface}"
-                    BorderBrush="{StaticResource Rail.BorderSubtle}"
+                    Background="{DynamicResource Rail.DetailSurface}"
+                    BorderBrush="{DynamicResource Rail.BorderSubtle}"
                     BorderThickness="1"
-                    CornerRadius="{StaticResource Rail.RootCornerRadius}">
+                    CornerRadius="{StaticResource Rail.RootCornerRadius}"
+                    MouseEnter="OnDetailsMouseEnter"
+                    MouseLeave="OnDetailsMouseLeave">
                 <StackPanel>
                     <TextBlock Margin="{StaticResource Rail.DetailTitleMargin}"
                                FontFamily="{StaticResource Rail.Font.Primary}"
                                FontSize="{StaticResource Rail.FontSize.DetailTitle}"
                                FontWeight="SemiBold"
-                               Foreground="{StaticResource Rail.TextPrimary}"
+                               Foreground="{DynamicResource Rail.TextPrimary}"
                                Text="Codex 可用额度" />
                     <ItemsControl ItemsSource="{Binding Tracks}">
                         <ItemsControl.ItemTemplate>
@@ -295,11 +297,11 @@
                                     <StackPanel>
                                         <TextBlock FontFamily="{StaticResource Rail.Font.Primary}"
                                                    FontSize="{StaticResource Rail.FontSize.DetailBody}"
-                                                   Foreground="{StaticResource Rail.TextPrimary}"
+                                                   Foreground="{DynamicResource Rail.TextPrimary}"
                                                    Text="{Binding Label}" />
                                         <TextBlock FontFamily="{StaticResource Rail.Font.Primary}"
                                                    FontSize="{StaticResource Rail.FontSize.Metadata}"
-                                                   Foreground="{StaticResource Rail.TextSecondary}"
+                                                   Foreground="{DynamicResource Rail.TextSecondary}"
                                                    Text="{Binding ResetText}" />
                                     </StackPanel>
                                     <TextBlock Grid.Column="1"
@@ -317,7 +319,7 @@
                     <TextBlock Margin="{StaticResource Rail.DetailFooterMargin}"
                                FontFamily="{StaticResource Rail.Font.Primary}"
                                FontSize="{StaticResource Rail.FontSize.Metadata}"
-                               Foreground="{StaticResource Rail.TextSecondary}"
+                               Foreground="{DynamicResource Rail.TextSecondary}"
                                Text="{Binding StatusText}" />
                 </StackPanel>
             </Border>
