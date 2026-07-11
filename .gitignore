@@ -7,6 +7,10 @@
 bin/
 obj/
 artifacts/
+.build/
+.build-release/
+DerivedData/
+*.xcuserstate
 
 # User-local settings and logs
 *.user

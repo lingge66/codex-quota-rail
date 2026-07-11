@@ -1,0 +1,36 @@
+name: macOS CI
+
+on:
+  push:
+    branches: [main, feature/codex-quota-rail]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test-and-build:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Show Swift toolchain
+        run: swift --version
+      - name: Test CodexQuotaKit
+        run: swift test --package-path macos/Packages/CodexQuotaKit
+      - name: Build Universal app
+        run: bash macos/Scripts/build-universal.sh 0.1.0-ci.${{ github.run_number }}
+      - name: Verify archive
+        run: |
+          ditto -x -k artifacts/macos/CodexQuotaRail-macOS-universal.app.zip artifacts/macos/unpacked
+          bash macos/Scripts/verify-app.sh artifacts/macos/unpacked/CodexQuotaRailMac.app
+          cd artifacts/macos
+          shasum -a 256 -c SHA256SUMS.txt
+      - name: Upload macOS artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: CodexQuotaRail-macOS-universal
+          path: |
+            artifacts/macos/CodexQuotaRail-macOS-universal.app.zip
+            artifacts/macos/SHA256SUMS.txt
+            artifacts/macos/VERSION.txt

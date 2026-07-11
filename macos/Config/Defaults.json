@@ -1,0 +1,18 @@
+{
+  "schemaVersion": 1,
+  "theme": "automatic",
+  "reduceMotion": false,
+  "launchAtLogin": true,
+  "hasCompletedOnboarding": false,
+  "followPaused": false,
+  "focusedOpacity": 1.0,
+  "unfocusedOpacity": 0.52,
+  "railHeight": 22.0,
+  "compactHeight": 4.0,
+  "cornerRadius": 8.0,
+  "customThemePath": null,
+  "websiteURL": "https://lingge66.pages.dev/",
+  "targetBundleIdentifiers": [
+    "com.openai.codex"
+  ]
+}
