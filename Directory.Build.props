@@ -10,6 +10,7 @@
     <DebugType>embedded</DebugType>
     <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
     <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
+    <RuntimeIdentifiers>win-x64</RuntimeIdentifiers>
     <NuGetAuditMode>all</NuGetAuditMode>
   </PropertyGroup>
 </Project>

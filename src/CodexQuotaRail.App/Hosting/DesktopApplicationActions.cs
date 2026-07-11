@@ -1,11 +1,15 @@
 using System.Diagnostics;
 using System.IO;
+using System.Net.Http;
+using System.Text.Json;
 using System.Windows;
+using CodexQuotaRail.App.Updates;
 
 namespace CodexQuotaRail.App.Hosting;
 
 public sealed class DesktopApplicationActions : IApplicationActions
 {
+    private static readonly HttpClient UpdateHttpClient = new();
     private readonly string _logDirectory;
     private readonly Action _requestExit;
 
@@ -17,11 +21,7 @@ public sealed class DesktopApplicationActions : IApplicationActions
         _requestExit = requestExit;
     }
 
-    public void CheckForUpdates() => System.Windows.MessageBox.Show(
-        "当前是本地开发版本。正式发布后将通过 GitHub Release 安全检查更新。",
-        "Codex 可用额度",
-        MessageBoxButton.OK,
-        MessageBoxImage.Information);
+    public void CheckForUpdates() => _ = CheckForUpdatesAsync();
 
     public void OpenLogs()
     {
@@ -42,4 +42,50 @@ public sealed class DesktopApplicationActions : IApplicationActions
         MessageBoxImage.Information);
 
     public void RequestExit() => _requestExit();
+
+    private static async Task CheckForUpdatesAsync()
+    {
+        try
+        {
+            var currentVersion = typeof(DesktopApplicationActions).Assembly.GetName().Version ??
+                new Version(0, 1, 0);
+            var result = await new GitHubReleaseChecker(UpdateHttpClient)
+                .CheckAsync(currentVersion);
+            if (result.Status != UpdateCheckStatus.UpdateAvailable ||
+                result.LatestVersion is null ||
+                result.ReleasePage is null)
+            {
+                System.Windows.MessageBox.Show(
+                    result.Status == UpdateCheckStatus.NoStableRelease
+                        ? "暂未找到可用的稳定版本。"
+                        : $"当前已是最新版本（{currentVersion.ToString(3)}）。",
+                    "Codex 可用额度",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Information);
+                return;
+            }
+
+            var confirmation = System.Windows.MessageBox.Show(
+                $"发现新版本 {result.LatestVersion.ToString(3)}，是否打开 GitHub Release 页面？",
+                "Codex 可用额度",
+                MessageBoxButton.YesNo,
+                MessageBoxImage.Information);
+            if (confirmation == MessageBoxResult.Yes)
+            {
+                _ = Process.Start(
+                    new ProcessStartInfo(result.ReleasePage.AbsoluteUri)
+                    {
+                        UseShellExecute = true,
+                    });
+            }
+        }
+        catch (Exception error) when (error is HttpRequestException or JsonException or TimeoutException)
+        {
+            System.Windows.MessageBox.Show(
+                $"检查更新失败：{error.Message}",
+                "Codex 可用额度",
+                MessageBoxButton.OK,
+                MessageBoxImage.Warning);
+        }
+    }
 }
