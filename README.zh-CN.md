@@ -58,6 +58,22 @@ Get-Content .\SHA256SUMS.txt
 
 更多信息见[隐私说明](docs/privacy.md)、[架构说明](docs/architecture.md)、[故障排查](docs/troubleshooting.md)和[发布检查表](docs/release-checklist.md)。
 
+## 联系领哥与加入社群
+
+| 入口 | 链接 |
+| --- | --- |
+| 领哥个人网站 | [lingge66.pages.dev](https://lingge66.pages.dev/) |
+| X（Twitter） | [@shangdu2005](https://x.com/shangdu2005) |
+| QQ 社群 | [打开社群页面](https://lingge66.pages.dev/community/) |
+
+<p align="center">
+  <a href="https://lingge66.pages.dev/community/">
+    <img src="docs/assets/lingge-qq-community.png" width="320" alt="领哥 QQ 社群二维码">
+  </a>
+  <br>
+  <sub>扫描二维码加入 QQ 社群，或点击二维码打开社群页面</sub>
+</p>
+
 ## 许可证
 
 MIT，详见 [LICENSE](LICENSE) 与 [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md)。

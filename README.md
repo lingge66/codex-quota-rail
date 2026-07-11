@@ -59,6 +59,22 @@ Until code signing is configured, Windows may show an unknown publisher warning.
 
 See [中文说明](README.zh-CN.md), [privacy](docs/privacy.md), [architecture](docs/architecture.md), and [troubleshooting](docs/troubleshooting.md).
 
+## Contact LingGe and join the community
+
+| Destination | Link |
+| --- | --- |
+| LingGe's website | [lingge66.pages.dev](https://lingge66.pages.dev/) |
+| X (Twitter) | [@shangdu2005](https://x.com/shangdu2005) |
+| QQ community | [Open the community page](https://lingge66.pages.dev/community/) |
+
+<p align="center">
+  <a href="https://lingge66.pages.dev/community/">
+    <img src="docs/assets/lingge-qq-community.png" width="320" alt="LingGe QQ community QR code">
+  </a>
+  <br>
+  <sub>Scan the QR code to join the QQ community, or click it to open the community page.</sub>
+</p>
+
 ## License
 
 MIT. See [LICENSE](LICENSE) and [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md).
