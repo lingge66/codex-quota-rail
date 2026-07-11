@@ -1,8 +1,11 @@
 # 0.1.0-rc.1 本机验收记录
 
-日期：2026-07-11  
-系统：Windows 10.0.26100 x64  
-Codex：Microsoft Store 包 `OpenAI.Codex` 26.707.3748.0  
+日期：2026-07-11
+
+系统：Windows 10.0.26100 x64
+
+Codex：Microsoft Store 包 `OpenAI.Codex` 26.707.3748.0
+
 候选程序：`artifacts/publish/win-x64/CodexQuotaRail.App.exe`，自包含单文件
 
 ## 结果
