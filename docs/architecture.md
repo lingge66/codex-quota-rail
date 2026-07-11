@@ -2,12 +2,14 @@
 
 ## 数据流
 
-`Codex App Server → AppServer 适配层 → Core 可用额度模型 → IQuotaRenderer → WPF 边缘轨`
+`Codex App Server → 平台协议适配层 → 可用额度模型 → 平台窗口跟踪 → 原生边缘轨`
 
 - `CodexQuotaRail.AppServer` 发现本机 Codex 可执行文件，以 stdio JSONL 连接官方 App Server，读取 `account/rateLimits/read` 并处理推送。
 - `CodexQuotaRail.Core` 将 `usedPercent` 转为 `availablePercent = clamp(100 - usedPercent, 0, 100)`，形成不依赖 UI 的领域模型。
 - `CodexQuotaRail.Windows` 使用 WinEvent 与 Win32 查询识别 Codex 主窗口，计算外侧 22px 或内部 4px 的物理像素位置。
 - `CodexQuotaRail.App` 组合生命周期、托盘、设置、日志、无障碍和 `RailQuotaRenderer`。
+- `macos/Packages/CodexQuotaKit` 使用 Swift 实现相同额度语义、JSONL JSON-RPC、设置、主题与窗口放置纯逻辑。
+- `macos/App` 使用 SwiftUI + AppKit、Accessibility、`NSPanel`、`NSStatusItem` 和 `SMAppService` 组成原生菜单栏应用。
 
 ## 安全与隐私边界
 
@@ -19,7 +21,10 @@ App Server 子进程只通过标准输入输出通信。本程序不监听端口
 - 网络恢复和系统唤醒立即重置等待并完整刷新。
 - Explorer 重启后重建托盘图标。
 - 窗口事件按已知 Codex 句柄过滤，避免全桌面位置事件触发高 CPU 扫描。
+- macOS 使用 `AXObserver` 事件与一秒低频校准，睡眠时停止服务，唤醒后重建 App Server 和窗口跟踪。
 
 ## 扩展
 
 额度展示依赖 `IQuotaRenderer`。后续可以新增 `PetQuotaRenderer`，复用同一额度源、窗口跟踪和设置系统，不需要改变数据协议。
+
+macOS 对应扩展边界为 `QuotaDataProviding`、`TargetWindowTracking` 和 SwiftUI 轨道视图。主题只解析声明式 JSON，不动态加载脚本或二进制插件。
