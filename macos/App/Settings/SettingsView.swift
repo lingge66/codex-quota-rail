@@ -1,11 +1,12 @@
 import CodexQuotaKit
 import SwiftUI
 
+@MainActor
 struct SettingsView: View {
     @ObservedObject var model: ApplicationModel
     let accessibilityPermission: AccessibilityPermissionService
     let launchAtLoginService: LaunchAtLoginService
-    let onLaunchAtLoginChanged: (Bool) -> Void
+    let onLaunchAtLoginChanged: @MainActor @Sendable (Bool) -> Void
 
     @State private var websiteText: String
     @State private var bundleIdentifiersText: String
@@ -15,7 +16,7 @@ struct SettingsView: View {
         model: ApplicationModel,
         accessibilityPermission: AccessibilityPermissionService,
         launchAtLoginService: LaunchAtLoginService,
-        onLaunchAtLoginChanged: @escaping (Bool) -> Void
+        onLaunchAtLoginChanged: @escaping @MainActor @Sendable (Bool) -> Void
     ) {
         self.model = model
         self.accessibilityPermission = accessibilityPermission

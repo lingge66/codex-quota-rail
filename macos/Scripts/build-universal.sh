@@ -63,7 +63,7 @@ iconutil -c icns "$ICONSET" -o "$APP/Contents/Resources/LingGe.icns"
 /usr/libexec/PlistBuddy -c "Add :CFBundleIconFile string LingGe" "$APP/Contents/Info.plist"
 
 codesign --force --deep --sign - "$APP"
-"$MACOS_ROOT/Scripts/verify-app.sh" "$APP"
+bash "$MACOS_ROOT/Scripts/verify-app.sh" "$APP"
 
 ZIP="$ARTIFACTS/CodexQuotaRail-macOS-universal.app.zip"
 ditto -c -k --sequesterRsrc --keepParent "$APP" "$ZIP"
