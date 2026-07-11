@@ -4,6 +4,8 @@
 
 ## [Unreleased]
 
+## [0.1.0-rc.5] - 2026-07-11
+
 ### 新增
 
 - 新增原生 macOS 13+ SwiftUI + AppKit 版本，支持菜单栏、22px/4px 边缘轨、辅助功能窗口跟踪和 Universal Intel/Apple Silicon 构建。

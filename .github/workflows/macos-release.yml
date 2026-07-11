@@ -17,12 +17,15 @@ jobs:
       - name: Build Universal app
         env:
           RELEASE_VERSION: ${{ github.ref_name }}
-        run: bash macos/Scripts/build-universal.sh "${RELEASE_VERSION#v}"
-      - name: Add macOS files to draft release
+        run: |
+          bash macos/Scripts/build-universal.sh "${RELEASE_VERSION#v}"
+          cp artifacts/macos/SHA256SUMS.txt artifacts/macos/SHA256SUMS-macOS.txt
+      - name: Add macOS files to public prerelease
         uses: softprops/action-gh-release@v2
         with:
-          draft: true
+          draft: false
+          prerelease: true
           files: |
             artifacts/macos/CodexQuotaRail-macOS-universal.app.zip
-            artifacts/macos/SHA256SUMS.txt
+            artifacts/macos/SHA256SUMS-macOS.txt
             artifacts/macos/VERSION.txt

@@ -19,6 +19,8 @@ Codex Quota Rail is a native Windows and macOS utility that attaches a non-activ
 
 Supported platforms are Windows x64 and macOS 13 or later. A future renderer can add a Codex pet without changing the quota source.
 
+[Download the Windows and macOS prerelease](https://github.com/lingge66/codex-quota-rail/releases/tag/v0.1.0-rc.5). Current builds are not commercially code-signed; verify the bundled SHA-256 first.
+
 ## Run from source
 
 ### Windows

@@ -8,7 +8,7 @@
 
 ## 安装
 
-1. 从同一个 GitHub Release 下载 `CodexQuotaRail-macOS-universal.app.zip` 与 `SHA256SUMS.txt`。
+1. 从同一个 GitHub Release 下载 `CodexQuotaRail-macOS-universal.app.zip` 与 `SHA256SUMS-macOS.txt`。
 2. 在终端执行 `shasum -a 256 CodexQuotaRail-macOS-universal.app.zip`，与校验文件比较。
 3. 解压 ZIP，把 `CodexQuotaRailMac.app` 移到 `/Applications`。
 4. 首次打开时在 Finder 中右键应用并选择“打开”，确认运行未签名应用。
