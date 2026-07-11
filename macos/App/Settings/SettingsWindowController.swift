@@ -7,7 +7,7 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
         model: ApplicationModel,
         accessibilityPermission: AccessibilityPermissionService,
         launchAtLoginService: LaunchAtLoginService,
-        onLaunchAtLoginChanged: @escaping @MainActor @Sendable (Bool) -> Void
+        onLaunchAtLoginChanged: @escaping (Bool) -> Void
     ) {
         let content = SettingsView(
             model: model,

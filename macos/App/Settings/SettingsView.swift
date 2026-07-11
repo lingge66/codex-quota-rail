@@ -1,12 +1,11 @@
 import CodexQuotaKit
 import SwiftUI
 
-@MainActor
 struct SettingsView: View {
     @ObservedObject var model: ApplicationModel
     let accessibilityPermission: AccessibilityPermissionService
     let launchAtLoginService: LaunchAtLoginService
-    let onLaunchAtLoginChanged: @MainActor @Sendable (Bool) -> Void
+    let onLaunchAtLoginChanged: (Bool) -> Void
 
     @State private var websiteText: String
     @State private var bundleIdentifiersText: String
@@ -16,7 +15,7 @@ struct SettingsView: View {
         model: ApplicationModel,
         accessibilityPermission: AccessibilityPermissionService,
         launchAtLoginService: LaunchAtLoginService,
-        onLaunchAtLoginChanged: @escaping @MainActor @Sendable (Bool) -> Void
+        onLaunchAtLoginChanged: @escaping (Bool) -> Void
     ) {
         self.model = model
         self.accessibilityPermission = accessibilityPermission
@@ -98,7 +97,7 @@ struct SettingsView: View {
     private var launchAtLoginBinding: Binding<Bool> {
         Binding(
             get: { model.settings.launchAtLogin },
-            set: onLaunchAtLoginChanged)
+            set: { value in onLaunchAtLoginChanged(value) })
     }
 
     private var focusedOpacityBinding: Binding<Double> {
