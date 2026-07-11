@@ -90,7 +90,11 @@ public sealed class RateLimitSourceTests
         fixture.Time.Advance(TimeSpan.FromSeconds(2));
         await recovered.WaitAsync(fixture.CancellationToken);
         recoveredConnection.NextRateLimitException = new IOException("private raw failure");
+        var stale = fixture.NextConnectionState();
         await fixture.Source.RefreshAsync(fixture.CancellationToken);
+        Assert.Equal(
+            QuotaConnectionState.Stale,
+            await stale.WaitAsync(fixture.CancellationToken));
         fixture.Time.Advance(TimeSpan.FromSeconds(1));
         var beforeResetDelay = fixture.Factory.CreateCount;
         fixture.Time.Advance(TimeSpan.FromSeconds(1));

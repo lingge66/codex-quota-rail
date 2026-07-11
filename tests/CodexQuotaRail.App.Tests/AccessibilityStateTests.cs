@@ -8,8 +8,16 @@ using CodexQuotaRail.App.Settings;
 
 namespace CodexQuotaRail.App.Tests;
 
+[Collection(WpfTestGroup.Name)]
 public sealed partial class AccessibilityStateTests
 {
+    private readonly WpfTestHost _wpf;
+
+    public AccessibilityStateTests(WpfTestHost wpf)
+    {
+        _wpf = wpf;
+    }
+
     [Fact]
     public async Task SystemAnimationSettingBecomesDefaultUntilUserChooses()
     {
@@ -62,30 +70,40 @@ public sealed partial class AccessibilityStateTests
     [Fact]
     public async Task RailIsNonActivatingNamedAndDetailsRemainUnclippedAtTwoHundredPercent()
     {
-        var result = new TaskCompletionSource<RailAccessibilityResult>(
-            TaskCreationOptions.RunContinuationsAsynchronously);
-        var thread = new Thread(
+        var state = await _wpf.InvokeAsync(
             () =>
             {
+                var application = System.Windows.Application.Current!;
+                foreach (var dictionary in application.Resources.MergedDictionaries.ToArray())
+                {
+                    application.Resources.MergedDictionaries.Remove(dictionary);
+                }
+
+                application.Resources.MergedDictionaries.Add(
+                    new ResourceDictionary
+                    {
+                        Source = new Uri(
+                            "/CodexQuotaRail.App;component/Resources/Design.Tokens.xaml",
+                            UriKind.Relative),
+                    });
+                application.Resources.MergedDictionaries.Add(
+                    new ResourceDictionary
+                    {
+                        Source = new Uri(
+                            "/CodexQuotaRail.App;component/Resources/Theme.Dark.xaml",
+                            UriKind.Relative),
+                    });
+                var window = new RailWindow();
+                var ownerWindow = new Window
+                {
+                    Left = -10_000,
+                    Top = -10_000,
+                    Width = 800,
+                    Height = 600,
+                    ShowInTaskbar = false,
+                };
                 try
                 {
-                    var application = System.Windows.Application.Current ??
-                        new System.Windows.Application();
-                    application.Resources.MergedDictionaries.Add(
-                        new ResourceDictionary
-                        {
-                            Source = new Uri(
-                                "/CodexQuotaRail.App;component/Resources/Design.Tokens.xaml",
-                                UriKind.Relative),
-                        });
-                    application.Resources.MergedDictionaries.Add(
-                        new ResourceDictionary
-                        {
-                            Source = new Uri(
-                                "/CodexQuotaRail.App;component/Resources/Theme.Dark.xaml",
-                                UriKind.Relative),
-                        });
-                    var window = new RailWindow();
                     var root = (FrameworkElement)window.FindName("RootBorder");
                     var popup = (Popup)window.FindName("DetailsPopup");
                     var startsTopmost = window.Topmost;
@@ -94,14 +112,6 @@ public sealed partial class AccessibilityStateTests
                     popupChild.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
                     window.Left = -10_000;
                     window.Top = -10_000;
-                    var ownerWindow = new Window
-                    {
-                        Left = -10_000,
-                        Top = -10_000,
-                        Width = 800,
-                        Height = 600,
-                        ShowInTaskbar = false,
-                    };
                     ownerWindow.Show();
                     var ownerHandle = new WindowInteropHelper(ownerWindow).Handle;
                     window.Show();
@@ -146,35 +156,30 @@ public sealed partial class AccessibilityStateTests
                             1),
                         dpiScale: 1,
                         ownerHandle: ownerHandle);
-                    result.TrySetResult(
-                        new RailAccessibilityResult(
-                            window.ShowActivated,
-                            window.ShowInTaskbar,
-                            startsTopmost,
-                            window.Focusable,
-                            AutomationProperties.GetName(root),
-                            popup.Focusable,
-                            popup.StaysOpen,
-                            popupChild.DesiredSize.Height,
-                            MouseClickDoesNotActivate: mouseActivateResult == 3,
-                            nativeClickOpenedDetails,
-                            unfocusedRailClickOpenedDetails,
-                            compactPlacementClosedDetails,
-                            detailsClosedWhenUnfocused,
-                            RailOwnsTrackedWindow: GetWindow(railHandle, 4) == ownerHandle,
-                            RailIsNotGloballyTopmost: !window.Topmost));
+                    return new RailAccessibilityResult(
+                        window.ShowActivated,
+                        window.ShowInTaskbar,
+                        startsTopmost,
+                        window.Focusable,
+                        AutomationProperties.GetName(root),
+                        popup.Focusable,
+                        popup.StaysOpen,
+                        popupChild.DesiredSize.Height,
+                        MouseClickDoesNotActivate: mouseActivateResult == 3,
+                        nativeClickOpenedDetails,
+                        unfocusedRailClickOpenedDetails,
+                        compactPlacementClosedDetails,
+                        detailsClosedWhenUnfocused,
+                        RailOwnsTrackedWindow: GetWindow(railHandle, 4) == ownerHandle,
+                        RailIsNotGloballyTopmost: !window.Topmost);
+                }
+                finally
+                {
                     window.Close();
                     ownerWindow.Close();
                 }
-                catch (Exception error)
-                {
-                    result.TrySetException(error);
-                }
             });
-        thread.SetApartmentState(ApartmentState.STA);
-        thread.Start();
 
-        var state = await result.Task.WaitAsync(TimeSpan.FromSeconds(5));
         Assert.False(state.ShowActivated);
         Assert.False(state.ShowInTaskbar);
         Assert.False(state.Topmost);
@@ -190,7 +195,6 @@ public sealed partial class AccessibilityStateTests
         Assert.True(state.DetailsClosedWhenUnfocused);
         Assert.True(state.RailOwnsTrackedWindow);
         Assert.True(state.RailIsNotGloballyTopmost);
-        Assert.True(thread.Join(TimeSpan.FromSeconds(2)));
     }
 
     private sealed record RailAccessibilityResult(

@@ -9,6 +9,7 @@ namespace CodexQuotaRail.AppServer.Tests;
 internal sealed class SourceFixture : IAsyncDisposable
 {
     private readonly ConcurrentQueue<TaskCompletionSource<RawQuotaSnapshot>> _snapshotWaiters = new();
+    private readonly ConcurrentQueue<TaskCompletionSource<QuotaConnectionState>> _connectionWaiters = new();
     private readonly CancellationTokenSource _timeout = new(TimeSpan.FromSeconds(10));
 
     private SourceFixture(
@@ -23,7 +24,14 @@ internal sealed class SourceFixture : IAsyncDisposable
         Availability = availability;
         Time = time;
         Connection = connection;
-        Source.ConnectionChanged += (_, state) => ConnectionStates.Add(state);
+        Source.ConnectionChanged += (_, state) =>
+        {
+            ConnectionStates.Add(state);
+            if (_connectionWaiters.TryDequeue(out var waiter))
+            {
+                waiter.TrySetResult(state);
+            }
+        };
         Source.SnapshotChanged += (_, snapshot) =>
         {
             if (_snapshotWaiters.TryDequeue(out var waiter))
@@ -90,6 +98,14 @@ internal sealed class SourceFixture : IAsyncDisposable
         var waiter = new TaskCompletionSource<RawQuotaSnapshot>(
             TaskCreationOptions.RunContinuationsAsynchronously);
         _snapshotWaiters.Enqueue(waiter);
+        return waiter.Task;
+    }
+
+    public Task<QuotaConnectionState> NextConnectionState()
+    {
+        var waiter = new TaskCompletionSource<QuotaConnectionState>(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        _connectionWaiters.Enqueue(waiter);
         return waiter.Task;
     }
 
