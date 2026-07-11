@@ -18,7 +18,7 @@
 
 支持 Windows x64，以及 macOS 13 或更高版本。
 
-[下载 Windows 与 macOS 预发布包](https://github.com/lingge66/codex-quota-rail/releases/tag/v0.1.0-rc.6)。当前构建未使用商业代码签名，请先核对随包 SHA-256。
+[下载 Windows 与 macOS 预发布包](https://github.com/lingge66/codex-quota-rail/releases/tag/v0.1.0-rc.7)。当前构建未使用商业代码签名，请先核对随包 SHA-256。
 
 ## 从源码运行
 

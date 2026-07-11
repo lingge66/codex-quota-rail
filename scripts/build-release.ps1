@@ -76,7 +76,7 @@ if (-not $SkipInstaller) {
     if (-not $makensis) {
         $commonPath = Join-Path ${env:ProgramFiles(x86)} 'NSIS\makensis.exe'
         if (Test-Path -LiteralPath $commonPath) {
-            $makensis = Get-Item -LiteralPath $commonPath
+            $makensis = Get-Command -Name $commonPath -ErrorAction Stop
         }
     }
     if (-not $makensis) {
