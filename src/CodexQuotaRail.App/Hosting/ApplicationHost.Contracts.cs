@@ -1,4 +1,5 @@
 using CodexQuotaRail.App.Settings;
+using CodexQuotaRail.AppServer.RateLimits;
 using CodexQuotaRail.Core.Quotas;
 using CodexQuotaRail.Windows.Overlay;
 
@@ -30,4 +31,29 @@ public interface IApplicationActions
     void ShowTroubleshooting();
 
     void RequestExit();
+}
+
+public interface IAccessibilitySettings
+{
+    bool ClientAreaAnimationEnabled { get; }
+}
+
+public enum SystemPowerTransition
+{
+    Suspend,
+    Resume,
+}
+
+public interface ISystemEventSource : IDisposable
+{
+    event EventHandler<SystemPowerTransition>? PowerChanged;
+
+    event EventHandler? NetworkAvailable;
+
+    event EventHandler? TaskbarRestarted;
+}
+
+public interface IDesktopTransitionSignal : IRateLimitAvailabilitySignal, IDisposable
+{
+    event EventHandler? TaskbarRestarted;
 }

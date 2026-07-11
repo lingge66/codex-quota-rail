@@ -154,6 +154,7 @@
 
     <Grid>
         <Border x:Name="RootBorder"
+                AutomationProperties.Name="Codex 可用额度"
                 MouseEnter="OnRailMouseEnter"
                 MouseLeave="OnRailMouseLeave">
             <Border.Style>

@@ -13,6 +13,8 @@ public partial class RailWindow : Window
     private readonly DispatcherTimer _hoverTimer;
     private PendingPlacement? _pendingPlacement;
     private bool _closed;
+    private double _lastDpiScale = 1;
+    private OverlayPlacement? _lastPlacement;
     private bool _renderQueued;
     private int _shimmerVersion;
 
@@ -48,9 +50,10 @@ public partial class RailWindow : Window
             return;
         }
 
-        _pendingPlacement = new PendingPlacement(
-            placement,
-            double.IsFinite(dpiScale) && dpiScale > 0 ? dpiScale : 1.0);
+        var normalizedScale = double.IsFinite(dpiScale) && dpiScale > 0 ? dpiScale : 1.0;
+        _lastPlacement = placement;
+        _lastDpiScale = normalizedScale;
+        _pendingPlacement = new PendingPlacement(placement, normalizedScale);
         if (_renderQueued)
         {
             return;
@@ -68,6 +71,18 @@ public partial class RailWindow : Window
         ViewModel.PropertyChanged -= OnViewModelPropertyChanged;
         CompositionTarget.Rendering -= OnCompositionRendering;
         base.OnClosed(e);
+    }
+
+    protected override void OnDpiChanged(DpiScale oldDpi, DpiScale newDpi)
+    {
+        base.OnDpiChanged(oldDpi, newDpi);
+        if (_lastPlacement is not { Mode: not OverlayMode.Hidden } placement ||
+            !RailMotion.ShouldReapplyForDpi(_lastDpiScale, newDpi.DpiScaleX))
+        {
+            return;
+        }
+
+        QueuePlacement(placement, newDpi.DpiScaleX);
     }
 
     private void OnCompositionRendering(object? sender, EventArgs eventArgs)
@@ -117,14 +132,15 @@ public partial class RailWindow : Window
         var current = Opacity;
         BeginAnimation(OpacityProperty, null);
         Opacity = normalized;
-        if (ViewModel.ReduceMotion || Math.Abs(current - normalized) < 0.01)
+        var duration = RailMotion.FocusOpacityDuration(ViewModel.ReduceMotion);
+        if (duration == TimeSpan.Zero || Math.Abs(current - normalized) < 0.01)
         {
             return;
         }
 
         BeginAnimation(
             OpacityProperty,
-            new DoubleAnimation(current, normalized, TimeSpan.FromMilliseconds(180))
+            new DoubleAnimation(current, normalized, duration)
             {
                 EasingFunction = new QuadraticEase { EasingMode = EasingMode.EaseOut },
             },

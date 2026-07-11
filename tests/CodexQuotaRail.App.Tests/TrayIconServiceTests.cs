@@ -71,6 +71,10 @@ public sealed class TrayIconServiceTests
 
         public void SetMenu(IReadOnlyList<TrayMenuItemModel> menu) => Menu = menu;
 
+        public void RecreateIcon()
+        {
+        }
+
         public void Invoke(string commandId) => CommandInvoked?.Invoke(this, commandId);
     }
 }

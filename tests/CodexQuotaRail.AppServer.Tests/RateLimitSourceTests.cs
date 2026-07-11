@@ -102,6 +102,32 @@ public sealed class RateLimitSourceTests
     }
 
     [Fact]
+    public async Task NetworkRestoreResetsBackoffBeforeImmediateRefresh()
+    {
+        var first = FakeRateLimitConnection.StartFailure();
+        var second = FakeRateLimitConnection.StartFailure();
+        var third = FakeRateLimitConnection.StartFailure();
+        var fourth = FakeRateLimitConnection.Valid();
+        await using var fixture = SourceFixture.Create(first, second, third, fourth);
+        await fixture.Source.StartAsync(fixture.CancellationToken);
+        fixture.Time.Advance(TimeSpan.FromSeconds(2));
+        await fixture.WaitForFactoryCountAsync(2);
+
+        fixture.Availability.SignalNetworkAvailable();
+        await fixture.WaitForFactoryCountAsync(3);
+        while (fixture.Time.TimerCreationCount < 3)
+        {
+            await Task.Delay(1, fixture.CancellationToken);
+        }
+
+        var recovered = fixture.NextSnapshot();
+        fixture.Time.Advance(TimeSpan.FromSeconds(2));
+        await recovered.WaitAsync(fixture.CancellationToken);
+
+        Assert.Equal(4, fixture.Factory.CreateCount);
+    }
+
+    [Fact]
     public async Task PauseSuppressesTimerAndResumeOrNetworkRefreshesImmediately()
     {
         // Given

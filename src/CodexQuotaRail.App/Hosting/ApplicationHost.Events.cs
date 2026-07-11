@@ -19,6 +19,14 @@ public sealed partial class ApplicationHost
     private void OnTrayCommandRequested(object? sender, TrayCommandRequest request) =>
         QueueEvent("tray_command", token => HandleTrayCommandAsync(request, token));
 
+    private void OnTaskbarRestarted(object? sender, EventArgs eventArgs) =>
+        QueueEvent(
+            "taskbar_restarted",
+            token => _dispatcher.InvokeAsync(
+                    () => _tray?.RecreateIcon(),
+                    token)
+                .AsTask());
+
     private void QueueEvent(
         string eventName,
         Func<CancellationToken, Task> callback)
@@ -123,7 +131,11 @@ public sealed partial class ApplicationHost
                 return;
             case TrayCommand.SetReduceMotion:
                 await SaveSettingsAsync(
-                    _settings with { ReduceMotion = request.BooleanValue is true },
+                    _settings with
+                    {
+                        ReduceMotion = request.BooleanValue is true,
+                        ReduceMotionConfigured = true,
+                    },
                     cancellationToken).ConfigureAwait(false);
                 return;
             case TrayCommand.SetAutostart:

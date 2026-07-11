@@ -28,13 +28,14 @@ public partial class App
             new DispatcherSynchronizationContext(Dispatcher));
         var windowTracker = new CodexWindowTracker(new WindowNativeApi(), scheduler);
         var resolver = new CodexExecutableResolver(new SystemCodexDiscoveryProbe());
+        var transitions = new DesktopTransitionSignal(new WindowsSystemEventSource());
         var connectionFactory = new JsonRpcRateLimitConnectionFactory(
             diagnostic => _ = WriteDiagnosticAsync(log, diagnostic));
         var rateSource = new RateLimitSource(
             new RateLimitSourceDependencies(
                 resolver,
                 connectionFactory,
-                new PassiveAvailabilitySignal(),
+                transitions,
                 TimeProvider.System,
                 GetClientVersion()));
         var executablePath = Environment.ProcessPath ??
@@ -51,10 +52,12 @@ public partial class App
             new TrayIconFactory(),
             windowTracker,
             rateSource,
+            transitions,
             overlay,
             autostart,
             actions,
             new WpfUiDispatcher(Dispatcher),
+            new WpfAccessibilitySettings(),
             log);
     }
 

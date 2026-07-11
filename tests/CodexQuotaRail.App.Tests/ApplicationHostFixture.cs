@@ -31,10 +31,12 @@ internal sealed class ApplicationHostFixture : IAsyncDisposable
             TrayFactory,
             Tracker,
             RateSource,
+            Transitions,
             Overlay,
             Autostart,
             Actions,
             Dispatcher,
+            Accessibility,
             Log);
     }
 
@@ -48,6 +50,8 @@ internal sealed class ApplicationHostFixture : IAsyncDisposable
 
     public FakeRateSource RateSource { get; }
 
+    public FakeDesktopTransitionSignal Transitions { get; }
+
     public FakeOverlayPresenter Overlay { get; }
 
     private FakeAutostartService Autostart { get; } = new();
@@ -55,6 +59,8 @@ internal sealed class ApplicationHostFixture : IAsyncDisposable
     private FakeApplicationActions Actions { get; } = new();
 
     public FakeUiDispatcher Dispatcher { get; } = new();
+
+    public FakeAccessibilitySettings Accessibility { get; } = new();
 
     private FakeApplicationLog Log { get; } = new();
 
@@ -110,12 +116,14 @@ internal sealed class ApplicationHostFixture : IAsyncDisposable
     {
         public List<AppSettings> Saved { get; } = [];
 
+        public AppSettings Initial { get; set; } = new();
+
         public void Dispose()
         {
         }
 
         public ValueTask<AppSettings> LoadAsync(CancellationToken cancellationToken = default) =>
-            ValueTask.FromResult(new AppSettings());
+            ValueTask.FromResult(Initial);
 
         public ValueTask SaveAsync(
             AppSettings settings,
@@ -143,6 +151,8 @@ internal sealed class ApplicationHostFixture : IAsyncDisposable
 
         public int DisposeCount { get; private set; }
 
+        public int RecreateCount { get; private set; }
+
         public List<TrayState> States { get; } = [];
 
         public bool ThrowOnDispose { get; set; }
@@ -158,6 +168,8 @@ internal sealed class ApplicationHostFixture : IAsyncDisposable
         }
 
         public void Emit(TrayCommandRequest request) => CommandRequested?.Invoke(this, request);
+
+        public void RecreateIcon() => RecreateCount++;
 
         public void UpdateState(TrayState state) => States.Add(state);
     }
@@ -213,6 +225,44 @@ internal sealed class ApplicationHostFixture : IAsyncDisposable
             order.Add("source:start");
             return Task.CompletedTask;
         }
+    }
+
+    internal sealed class FakeDesktopTransitionSignal(List<string> order)
+        : IDesktopTransitionSignal
+    {
+        public event EventHandler? Paused;
+
+        public event EventHandler? Resumed;
+
+        public event EventHandler? NetworkAvailable;
+
+        public event EventHandler? TaskbarRestarted;
+
+        public bool IsPaused { get; private set; }
+
+        public void Dispose() => order.Add("transitions:dispose");
+
+        public void EmitTaskbarRestarted() =>
+            TaskbarRestarted?.Invoke(this, EventArgs.Empty);
+
+        public void Pause()
+        {
+            IsPaused = true;
+            Paused?.Invoke(this, EventArgs.Empty);
+        }
+
+        public void Resume()
+        {
+            IsPaused = false;
+            Resumed?.Invoke(this, EventArgs.Empty);
+        }
+
+        public void RestoreNetwork() => NetworkAvailable?.Invoke(this, EventArgs.Empty);
+    }
+
+    internal sealed class FakeAccessibilitySettings : IAccessibilitySettings
+    {
+        public bool ClientAreaAnimationEnabled { get; set; } = true;
     }
 
     internal sealed class FakeOverlayPresenter(
@@ -275,6 +325,8 @@ internal sealed class ApplicationHostFixture : IAsyncDisposable
 
     private FakeRateSource CreateRateSource() => new(Order);
 
+    private FakeDesktopTransitionSignal CreateTransitions() => new(Order);
+
     private FakeOverlayPresenter CreateOverlay() => new(Order, Dispatcher);
 
     private ApplicationHostFixture()
@@ -282,6 +334,7 @@ internal sealed class ApplicationHostFixture : IAsyncDisposable
         TrayFactory = CreateTrayFactory();
         Tracker = CreateTracker();
         RateSource = CreateRateSource();
+        Transitions = CreateTransitions();
         Overlay = CreateOverlay();
     }
 }

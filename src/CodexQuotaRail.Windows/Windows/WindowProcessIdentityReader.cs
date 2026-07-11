@@ -29,7 +29,10 @@ internal static class WindowProcessIdentityReader
         }
 
         var packageFullName = ReadPackageFullName(process);
-        var signerSubject = packageFullName is null && HasTrustedSignature(executablePath)
+        var signerSubject = CodexExecutableIdentityPolicy.RequiresSignerLookup(
+                                executablePath,
+                                packageFullName) &&
+                            HasTrustedSignature(executablePath)
             ? ReadSignerSubject(executablePath)
             : null;
         return new WindowProcessIdentity(

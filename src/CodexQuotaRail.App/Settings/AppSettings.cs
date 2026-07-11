@@ -12,7 +12,8 @@ public sealed record AppSettings(
     bool StartWithWindows = true,
     bool ReduceMotion = false,
     ThemePreference Theme = ThemePreference.Automatic,
-    bool FollowPaused = false);
+    bool FollowPaused = false,
+    bool ReduceMotionConfigured = false);
 
 public sealed class UnsupportedSettingsSchemaException(int schemaVersion)
     : Exception($"设置文件版本 {schemaVersion} 高于当前程序支持的版本 1。")

@@ -45,6 +45,8 @@ public interface ITrayIconHost : IDisposable
     event EventHandler<string>? CommandInvoked;
 
     void SetMenu(IReadOnlyList<TrayMenuItemModel> menu);
+
+    void RecreateIcon();
 }
 
 public interface ITrayIconService : IDisposable
@@ -52,6 +54,8 @@ public interface ITrayIconService : IDisposable
     event EventHandler<TrayCommandRequest>? CommandRequested;
 
     void UpdateState(TrayState state);
+
+    void RecreateIcon();
 }
 
 public interface ITrayIconFactory
@@ -97,6 +101,12 @@ public sealed class TrayIconService : ITrayIconService
         ObjectDisposedException.ThrowIf(Volatile.Read(ref _disposed) != 0, this);
         _state = state;
         _host.SetMenu(BuildMenu(state));
+    }
+
+    public void RecreateIcon()
+    {
+        ObjectDisposedException.ThrowIf(Volatile.Read(ref _disposed) != 0, this);
+        _host.RecreateIcon();
     }
 
     public void Dispose()

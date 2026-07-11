@@ -36,6 +36,12 @@ public sealed partial class CodexWindowTracker
                 return;
             }
 
+            _knownCodexHandles.Clear();
+            foreach (var candidate in candidates)
+            {
+                _knownCodexHandles.Add(candidate.Handle);
+            }
+
             if (foreground != 0 && candidates.Any(candidate => candidate.Handle == foreground))
             {
                 _activationOrder[foreground] = ++_activationSequence;

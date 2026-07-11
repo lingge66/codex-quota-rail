@@ -6,6 +6,8 @@ internal sealed class ManualTimeProvider : TimeProvider
     private readonly List<ManualTimer> _timers = [];
     private DateTimeOffset _utcNow = DateTimeOffset.UnixEpoch;
 
+    public int TimerCreationCount { get; private set; }
+
     public Action? BeforeTimerCallback { get; set; }
 
     public override DateTimeOffset GetUtcNow()
@@ -27,6 +29,7 @@ internal sealed class ManualTimeProvider : TimeProvider
         lock (_sync)
         {
             _timers.Add(timer);
+            TimerCreationCount++;
         }
 
         return timer;

@@ -24,6 +24,7 @@ public sealed partial class CodexWindowTracker : ITrackedWindowSource
 
     private readonly Dictionary<nint, long> _activationOrder = [];
     private readonly List<nint> _hooks = [];
+    private readonly HashSet<nint> _knownCodexHandles = [];
     private readonly IWindowNativeApi _nativeApi;
     private readonly IWindowUpdateScheduler _scheduler;
     private readonly object _sync = new();
@@ -117,6 +118,7 @@ public sealed partial class CodexWindowTracker : ITrackedWindowSource
 
             _disposed = true;
             _refreshScheduled = false;
+            _knownCodexHandles.Clear();
             hooks = [.. _hooks];
             _hooks.Clear();
         }
@@ -129,14 +131,14 @@ public sealed partial class CodexWindowTracker : ITrackedWindowSource
 
     private void OnWindowEvent(TrackedWindowEvent windowEvent, nint handle)
     {
-        if (windowEvent == TrackedWindowEvent.Foreground && handle != 0)
+        lock (_sync)
         {
-            lock (_sync)
+            if (_disposed ||
+                (windowEvent is not TrackedWindowEvent.Foreground and
+                 not TrackedWindowEvent.Show &&
+                 !_knownCodexHandles.Contains(handle)))
             {
-                if (!_disposed)
-                {
-                    _activationOrder[handle] = ++_activationSequence;
-                }
+                return;
             }
         }
 

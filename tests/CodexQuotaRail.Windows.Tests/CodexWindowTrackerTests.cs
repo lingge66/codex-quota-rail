@@ -159,4 +159,57 @@ public sealed class CodexWindowTrackerTests
 
         Assert.Equal((nint)61, tracker.CurrentSnapshot?.Handle);
     }
+
+    [Fact]
+    public void UnrelatedForegroundWindowKeepsCodexTrackedButUnfocused()
+    {
+        var native = new FakeWindowNativeApi();
+        native.Add(new FakeWindow(70, PackagedCodex));
+        native.ForegroundWindow = 999;
+        using var tracker = new CodexWindowTracker(native, new ManualWindowUpdateScheduler());
+
+        tracker.Start();
+
+        var snapshot = Assert.IsType<TrackedWindowSnapshot>(tracker.CurrentSnapshot);
+        Assert.Equal((nint)70, snapshot.Handle);
+        Assert.False(snapshot.IsForeground);
+        Assert.Equal(
+            0.52,
+            CodexQuotaRail.Windows.Overlay.OverlayPlacementCalculator.Calculate(snapshot).Opacity);
+    }
+
+    [Fact]
+    public void UnrelatedLocationFloodDoesNotScheduleDesktopRescans()
+    {
+        var native = new FakeWindowNativeApi();
+        native.Add(new FakeWindow(80, PackagedCodex));
+        native.ForegroundWindow = 80;
+        var scheduler = new ManualWindowUpdateScheduler();
+        using var tracker = new CodexWindowTracker(native, scheduler);
+        tracker.Start();
+
+        for (var index = 0; index < 100; index++)
+        {
+            native.Raise(TrackedWindowEvent.LocationChange, 999);
+        }
+
+        Assert.Equal(0, scheduler.PendingCount);
+    }
+
+    [Fact]
+    public void UnrelatedForegroundChangeStillDimsTrackedCodex()
+    {
+        var native = new FakeWindowNativeApi();
+        native.Add(new FakeWindow(81, PackagedCodex));
+        native.ForegroundWindow = 81;
+        var scheduler = new ManualWindowUpdateScheduler();
+        using var tracker = new CodexWindowTracker(native, scheduler);
+        tracker.Start();
+
+        native.ForegroundWindow = 999;
+        native.Raise(TrackedWindowEvent.Foreground, 999);
+        scheduler.RunFrame();
+
+        Assert.False(tracker.CurrentSnapshot?.IsForeground);
+    }
 }

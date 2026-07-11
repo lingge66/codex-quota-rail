@@ -15,6 +15,7 @@ public sealed partial class ApplicationHost : IAsyncDisposable
         new PixelRect(0, 0, 0, 0),
         OverlayMode.Hidden,
         0);
+    private readonly IAccessibilitySettings _accessibility;
     private readonly IApplicationActions _actions;
     private readonly IAutostartService _autostart;
     private readonly IUiDispatcher _dispatcher;
@@ -25,6 +26,7 @@ public sealed partial class ApplicationHost : IAsyncDisposable
     private readonly IAppSettingsStore _settingsStore;
     private readonly object _sync = new();
     private readonly ITrayIconFactory _trayFactory;
+    private readonly IDesktopTransitionSignal _transitions;
     private readonly ITrackedWindowSource _windowTracker;
     private QuotaDisplayState _display = QuotaDisplayState.Waiting("正在连接 Codex");
     private Task _eventTail = Task.CompletedTask;
@@ -40,20 +42,24 @@ public sealed partial class ApplicationHost : IAsyncDisposable
         ITrayIconFactory trayFactory,
         ITrackedWindowSource windowTracker,
         IRateLimitSource rateSource,
+        IDesktopTransitionSignal transitions,
         IOverlayPresenter overlay,
         IAutostartService autostart,
         IApplicationActions actions,
         IUiDispatcher dispatcher,
+        IAccessibilitySettings accessibility,
         IApplicationLog log)
     {
         _settingsStore = settingsStore ?? throw new ArgumentNullException(nameof(settingsStore));
         _trayFactory = trayFactory ?? throw new ArgumentNullException(nameof(trayFactory));
         _windowTracker = windowTracker ?? throw new ArgumentNullException(nameof(windowTracker));
         _rateSource = rateSource ?? throw new ArgumentNullException(nameof(rateSource));
+        _transitions = transitions ?? throw new ArgumentNullException(nameof(transitions));
         _overlay = overlay ?? throw new ArgumentNullException(nameof(overlay));
         _autostart = autostart ?? throw new ArgumentNullException(nameof(autostart));
         _actions = actions ?? throw new ArgumentNullException(nameof(actions));
         _dispatcher = dispatcher ?? throw new ArgumentNullException(nameof(dispatcher));
+        _accessibility = accessibility ?? throw new ArgumentNullException(nameof(accessibility));
         _log = log ?? throw new ArgumentNullException(nameof(log));
     }
 
@@ -71,6 +77,13 @@ public sealed partial class ApplicationHost : IAsyncDisposable
         }
 
         _settings = await _settingsStore.LoadAsync(cancellationToken).ConfigureAwait(false);
+        if (!_settings.ReduceMotionConfigured)
+        {
+            _settings = _settings with
+            {
+                ReduceMotion = !_accessibility.ClientAreaAnimationEnabled,
+            };
+        }
         await _dispatcher.InvokeAsync(
             StartUiAndWindowTracking,
             cancellationToken).ConfigureAwait(false);
@@ -125,6 +138,7 @@ public sealed partial class ApplicationHost : IAsyncDisposable
         _windowTracker.SnapshotChanged += OnWindowSnapshotChanged;
         _rateSource.SnapshotChanged += OnRateSnapshotChanged;
         _rateSource.ConnectionChanged += OnConnectionChanged;
+        _transitions.TaskbarRestarted += OnTaskbarRestarted;
         lock (_sync)
         {
             _eventsEnabled = true;
@@ -191,6 +205,9 @@ public sealed partial class ApplicationHost : IAsyncDisposable
                 "dispose_rate_source",
                 () => _rateSource.DisposeAsync().AsTask()).ConfigureAwait(false);
             await RunCleanupAsync(
+                "dispose_transitions",
+                () => DisposeOnUiAsync(_transitions.Dispose)).ConfigureAwait(false);
+            await RunCleanupAsync(
                 "dispose_overlay",
                 () => DisposeOnUiAsync(_overlay.Dispose)).ConfigureAwait(false);
             await RunCleanupAsync(
@@ -229,6 +246,7 @@ public sealed partial class ApplicationHost : IAsyncDisposable
         _windowTracker.SnapshotChanged -= OnWindowSnapshotChanged;
         _rateSource.SnapshotChanged -= OnRateSnapshotChanged;
         _rateSource.ConnectionChanged -= OnConnectionChanged;
+        _transitions.TaskbarRestarted -= OnTaskbarRestarted;
     }
 
     private async Task DisposeOnUiAsync(Action action)

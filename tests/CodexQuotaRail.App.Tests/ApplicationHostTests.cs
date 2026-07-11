@@ -100,7 +100,13 @@ public sealed class ApplicationHostTests
         await Task.WhenAll(fixture.Host.ShutdownAsync(), fixture.Host.ShutdownAsync());
 
         Assert.Equal(
-            ["tray:dispose", "tracker:dispose", "source:dispose", "overlay:dispose"],
+            [
+                "tray:dispose",
+                "tracker:dispose",
+                "source:dispose",
+                "transitions:dispose",
+                "overlay:dispose",
+            ],
             fixture.Order.Where(item => item.EndsWith(":dispose", StringComparison.Ordinal)));
         Assert.Equal(1, fixture.TrayFactory.Created!.DisposeCount);
         Assert.Equal(1, fixture.Tracker.DisposeCount);

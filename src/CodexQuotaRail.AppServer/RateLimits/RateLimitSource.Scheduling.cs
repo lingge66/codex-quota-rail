@@ -26,7 +26,11 @@ public sealed partial class RateLimitSource
 
     private void OnResumed(object? sender, EventArgs eventArgs) => TryQueueSignalRefresh();
 
-    private void OnNetworkAvailable(object? sender, EventArgs eventArgs) => TryQueueSignalRefresh();
+    private void OnNetworkAvailable(object? sender, EventArgs eventArgs)
+    {
+        _backoff.Reset();
+        TryQueueSignalRefresh();
+    }
 
     private void TryQueueSignalRefresh()
     {

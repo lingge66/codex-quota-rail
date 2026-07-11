@@ -43,6 +43,13 @@ public sealed class WindowsFormsTrayIconHost : ITrayIconHost
         previousMenu?.Dispose();
     }
 
+    public void RecreateIcon()
+    {
+        ObjectDisposedException.ThrowIf(Volatile.Read(ref _disposed) != 0, this);
+        _notifyIcon.Visible = false;
+        _notifyIcon.Visible = true;
+    }
+
     public void Dispose()
     {
         if (Interlocked.Exchange(ref _disposed, 1) != 0)
