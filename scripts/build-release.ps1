@@ -92,7 +92,7 @@ if (-not $SkipInstaller) {
         "/DVERSION=$env:RELEASE_VERSION" `
         "/DPUBLISH_DIR=$publishDirectory" `
         "/DARTIFACT_DIR=$artifacts" `
-        'packaging\nsis\CodexQuotaRail.nsi'
+        (Join-Path $repositoryRoot 'packaging\nsis\CodexQuotaRail.nsi')
     Assert-LastExitCode 'makensis'
     if (-not (Test-Path -LiteralPath $setupPath)) {
         throw "Installer not found: $setupPath"
