@@ -16,6 +16,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var windowTrackingTask: Task<Void, Never>?
     private var settingsWindow: SettingsWindowController?
     private var onboardingWindow: OnboardingWindowController?
+    private var previewWindow: NSWindow?
     private var settingsCancellable: AnyCancellable?
     private var workspaceObservers: [NSObjectProtocol] = []
     private var activationObserver: NSObjectProtocol?
@@ -276,12 +277,27 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 isUnlimited: false),
             receivedAt: now))
         let screen = NSScreen.main?.frame ?? NSRect(x: 0, y: 0, width: 1440, height: 900)
+        let targetFrame = NSRect(
+            x: screen.midX - 500,
+            y: screen.midY - 300,
+            width: 1000,
+            height: 600)
+        let preview = NSWindow(
+            contentRect: .zero,
+            styleMask: [.titled, .closable, .miniaturizable, .resizable],
+            backing: .buffered,
+            defer: false)
+        preview.title = "Codex 预览窗口"
+        preview.setFrame(targetFrame, display: true)
+        preview.contentView = makePreviewContentView()
+        preview.makeKeyAndOrderFront(nil)
+        previewWindow = preview
         model.apply(windowSnapshot: TrackedMacWindowSnapshot(
             frame: MacRect(
-                x: Double(screen.midX - 500),
-                y: Double(screen.midY - 300),
-                width: 1000,
-                height: 600),
+                x: Double(preview.frame.minX),
+                y: Double(preview.frame.minY),
+                width: Double(preview.frame.width),
+                height: Double(preview.frame.height)),
             screenFrame: MacRect(
                 x: Double(screen.minX),
                 y: Double(screen.minY),
@@ -291,7 +307,36 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             isMinimized: false,
             isFullScreen: false,
             isFocused: true,
-            windowNumber: NSApp.mainWindow?.windowNumber ?? 0))
+            windowNumber: preview.windowNumber))
+        if CommandLine.arguments.contains("--rail-preview-details") {
+            model.toggleDetails()
+        }
+    }
+
+    private func makePreviewContentView() -> NSView {
+        let content = NSView()
+        content.wantsLayer = true
+        content.layer?.backgroundColor = NSColor(
+            calibratedWhite: 0.075,
+            alpha: 1).cgColor
+        let title = NSTextField(labelWithString: "Codex 工作区预览")
+        title.translatesAutoresizingMaskIntoConstraints = false
+        title.font = .systemFont(ofSize: 22, weight: .semibold)
+        title.textColor = .secondaryLabelColor
+        let subtitle = NSTextField(
+            labelWithString: "额度轨应贴在这个窗口顶部外侧，不覆盖标题栏功能。")
+        subtitle.translatesAutoresizingMaskIntoConstraints = false
+        subtitle.font = .systemFont(ofSize: 13)
+        subtitle.textColor = .tertiaryLabelColor
+        content.addSubview(title)
+        content.addSubview(subtitle)
+        NSLayoutConstraint.activate([
+            title.leadingAnchor.constraint(equalTo: content.leadingAnchor, constant: 28),
+            title.topAnchor.constraint(equalTo: content.topAnchor, constant: 28),
+            subtitle.leadingAnchor.constraint(equalTo: title.leadingAnchor),
+            subtitle.topAnchor.constraint(equalTo: title.bottomAnchor, constant: 8),
+        ])
+        return content
     }
 
     private func applicationSupportDirectory() -> URL {

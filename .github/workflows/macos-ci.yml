@@ -30,17 +30,20 @@ jobs:
         run: |
           APP="artifacts/macos/unpacked/CodexQuotaRailMac.app"
           LOG="artifacts/macos/rail-preview.log"
-          "$APP/Contents/MacOS/CodexQuotaRailMac" --rail-preview >"$LOG" 2>&1 &
-          PID=$!
-          cleanup() {
+          capture_preview() {
+            OUTPUT="$1"
+            shift
+            "$APP/Contents/MacOS/CodexQuotaRailMac" --rail-preview "$@" >>"$LOG" 2>&1 &
+            PID=$!
+            sleep 4
+            kill -0 "$PID"
+            screencapture -x "$OUTPUT"
+            test -s "$OUTPUT"
             kill "$PID" 2>/dev/null || true
             wait "$PID" 2>/dev/null || true
           }
-          trap cleanup EXIT
-          sleep 4
-          kill -0 "$PID"
-          screencapture -x artifacts/macos/rail-preview.png
-          test -s artifacts/macos/rail-preview.png
+          capture_preview artifacts/macos/rail-preview.png
+          capture_preview artifacts/macos/rail-preview-details.png --rail-preview-details
       - name: Upload macOS artifact
         uses: actions/upload-artifact@v4
         with:
@@ -50,4 +53,5 @@ jobs:
             artifacts/macos/SHA256SUMS.txt
             artifacts/macos/VERSION.txt
             artifacts/macos/rail-preview.png
+            artifacts/macos/rail-preview-details.png
             artifacts/macos/rail-preview.log
