@@ -15,9 +15,10 @@ struct CodexAppServerClientTests {
 
         try await client.start()
         let snapshot = try await client.refresh(receivedAt: Date(timeIntervalSince1970: 1_800_000_000))
+        let methods = try await transport.methods()
 
         #expect(snapshot.primary?.usedPercent == 68)
-        #expect(await transport.methods() == [
+        #expect(methods == [
             "initialize",
             "initialized",
             "account/read",
