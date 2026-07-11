@@ -60,6 +60,8 @@ struct CodexAppServerClientTests {
 private actor FakeJSONLineTransport: JSONLineTransport {
     private var responses: [Data]
     private var sent: [Data] = []
+    private var sentRequestCount = 0
+    private var deliveredResponseCount = 0
 
     init(responses: [String]) {
         self.responses = responses.map { Data($0.utf8) }
@@ -69,12 +71,21 @@ private actor FakeJSONLineTransport: JSONLineTransport {
 
     func send(_ line: Data) async throws {
         sent.append(line)
+        let object = try #require(JSONSerialization.jsonObject(with: line) as? [String: Any])
+        if object["id"] != nil {
+            sentRequestCount += 1
+        }
     }
 
     func receive() async throws -> Data {
+        while deliveredResponseCount >= sentRequestCount {
+            try Task.checkCancellation()
+            await Task.yield()
+        }
         guard !responses.isEmpty else {
             throw AppServerError.processClosed
         }
+        deliveredResponseCount += 1
         return responses.removeFirst()
     }
 
