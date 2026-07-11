@@ -9,7 +9,7 @@ final class AccessibilityPermissionService {
 
     func requestIfNeeded() -> Bool {
         let options = [
-            kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true,
+            "AXTrustedCheckOptionPrompt": true,
         ] as CFDictionary
         return AXIsProcessTrustedWithOptions(options)
     }

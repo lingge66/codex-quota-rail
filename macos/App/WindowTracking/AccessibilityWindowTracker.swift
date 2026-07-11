@@ -187,9 +187,11 @@ final class AccessibilityWindowTracker: TargetWindowTracking {
         for application: NSRunningApplication
     ) -> TrackedMacWindowSnapshot? {
         let applicationElement = AXUIElementCreateApplication(application.processIdentifier)
-        guard let window = axElement(applicationElement, attribute: kAXFocusedWindowAttribute),
-              let position = axPoint(window, attribute: kAXPositionAttribute),
-              let size = axSize(window, attribute: kAXSizeAttribute),
+        guard let window = axElement(
+                  applicationElement,
+                  attribute: kAXFocusedWindowAttribute as CFString),
+              let position = axPoint(window, attribute: kAXPositionAttribute as CFString),
+              let size = axSize(window, attribute: kAXSizeAttribute as CFString),
               size.width > 0,
               size.height > 0
         else {
@@ -206,8 +208,10 @@ final class AccessibilityWindowTracker: TargetWindowTracking {
         let frame = appKitFrame(fromAXFrame: axFrame)
         let screen = bestScreen(for: frame)
         let screenFrame = screen?.frame ?? NSScreen.main?.frame ?? frame
-        let minimized = axBoolean(window, attribute: kAXMinimizedAttribute) ?? false
-        let fullScreen = axBoolean(window, attribute: kAXFullScreenAttribute)
+        let minimized = axBoolean(
+            window,
+            attribute: kAXMinimizedAttribute as CFString) ?? false
+        let fullScreen = axBoolean(window, attribute: "AXFullScreen" as CFString)
             ?? approximatelyEqual(frame, screenFrame)
         return TrackedMacWindowSnapshot(
             frame: frame.macRect,
@@ -228,7 +232,7 @@ final class AccessibilityWindowTracker: TargetWindowTracking {
         else {
             return nil
         }
-        return unsafeBitCast(value, to: AXUIElement.self)
+        return unsafeDowncast(value, to: AXUIElement.self)
     }
 
     private func axPoint(_ element: AXUIElement, attribute: CFString) -> CGPoint? {
@@ -240,7 +244,7 @@ final class AccessibilityWindowTracker: TargetWindowTracking {
             return nil
         }
         var point = CGPoint.zero
-        guard AXValueGetValue(unsafeBitCast(value, to: AXValue.self), .cgPoint, &point) else {
+        guard AXValueGetValue(unsafeDowncast(value, to: AXValue.self), .cgPoint, &point) else {
             return nil
         }
         return point
@@ -255,7 +259,7 @@ final class AccessibilityWindowTracker: TargetWindowTracking {
             return nil
         }
         var size = CGSize.zero
-        guard AXValueGetValue(unsafeBitCast(value, to: AXValue.self), .cgSize, &size) else {
+        guard AXValueGetValue(unsafeDowncast(value, to: AXValue.self), .cgSize, &size) else {
             return nil
         }
         return size
@@ -269,7 +273,7 @@ final class AccessibilityWindowTracker: TargetWindowTracking {
         else {
             return nil
         }
-        return CFBooleanGetValue(unsafeBitCast(value, to: CFBoolean.self))
+        return CFBooleanGetValue(unsafeDowncast(value, to: CFBoolean.self))
     }
 
     private func matchingWindowNumber(processIdentifier: pid_t, axFrame: CGRect) -> Int {
@@ -284,8 +288,8 @@ final class AccessibilityWindowTracker: TargetWindowTracking {
                 guard let ownerPID = info[kCGWindowOwnerPID as String] as? Int,
                       ownerPID == Int(processIdentifier),
                       let number = info[kCGWindowNumber as String] as? Int,
-                      let bounds = info[kCGWindowBounds as String] as? CFDictionary,
-                      let frame = CGRect(dictionaryRepresentation: bounds)
+                      let bounds = info[kCGWindowBounds as String] as? [String: Any],
+                      let frame = CGRect(dictionaryRepresentation: bounds as CFDictionary)
                 else {
                     return nil
                 }
