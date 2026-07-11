@@ -20,7 +20,25 @@ jobs:
           cache-dependency-path: '**/packages.lock.json'
       - run: dotnet restore --locked-mode
       - run: dotnet build --configuration Release --no-restore
-      - run: dotnet test --configuration Release --no-build --logger "trx;LogFileName=tests.trx" --collect:"XPlat Code Coverage" --results-directory artifacts/TestResults
+      - name: Run test projects sequentially with coverage
+        shell: pwsh
+        run: |
+          $projects = @(
+            'tests/CodexQuotaRail.Core.Tests/CodexQuotaRail.Core.Tests.csproj',
+            'tests/CodexQuotaRail.Windows.Tests/CodexQuotaRail.Windows.Tests.csproj',
+            'tests/CodexQuotaRail.AppServer.Tests/CodexQuotaRail.AppServer.Tests.csproj',
+            'tests/CodexQuotaRail.App.Tests/CodexQuotaRail.App.Tests.csproj'
+          )
+          foreach ($project in $projects) {
+            $name = [IO.Path]::GetFileNameWithoutExtension($project)
+            dotnet test $project `
+              --configuration Release `
+              --no-build `
+              --logger "trx;LogFileName=$name.trx" `
+              --collect:"XPlat Code Coverage" `
+              --results-directory "artifacts/TestResults/$name"
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          }
       - name: Upload failed test results
         if: failure()
         uses: actions/upload-artifact@v4

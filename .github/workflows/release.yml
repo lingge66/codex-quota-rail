@@ -26,7 +26,7 @@ jobs:
         shell: pwsh
         run: |
           choco install nsis --version=3.12 -y --no-progress
-          $version = (& "$env:ProgramFiles(x86)\NSIS\makensis.exe" /VERSION | Select-Object -First 1).Trim()
+          $version = (& "${env:ProgramFiles(x86)}\NSIS\makensis.exe" /VERSION | Select-Object -First 1).Trim()
           if ($version -notmatch '^v?3\.12(?:\.0)?$') { throw "Unexpected NSIS version: $version" }
       - name: Build release artifacts
         shell: pwsh
@@ -45,7 +45,7 @@ jobs:
             Where-Object FullName -Match '\\x64\\' | Select-Object -First 1
           & $signtool.FullName sign /fd SHA256 /td SHA256 /tr http://timestamp.digicert.com /f $pfx /p $env:WINDOWS_CERTIFICATE_PASSWORD artifacts\publish\win-x64\CodexQuotaRail.App.exe
           $version = '${{ github.ref_name }}'.TrimStart('v')
-          & "$env:ProgramFiles(x86)\NSIS\makensis.exe" "/DVERSION=$version" "/DPUBLISH_DIR=$pwd\artifacts\publish\win-x64" "/DARTIFACT_DIR=$pwd\artifacts" packaging\nsis\CodexQuotaRail.nsi
+          & "${env:ProgramFiles(x86)}\NSIS\makensis.exe" "/DVERSION=$version" "/DPUBLISH_DIR=$pwd\artifacts\publish\win-x64" "/DARTIFACT_DIR=$pwd\artifacts" packaging\nsis\CodexQuotaRail.nsi
           & $signtool.FullName sign /fd SHA256 /td SHA256 /tr http://timestamp.digicert.com /f $pfx /p $env:WINDOWS_CERTIFICATE_PASSWORD artifacts\CodexQuotaRail-Setup.exe
           Compress-Archive artifacts\publish\win-x64\* artifacts\CodexQuotaRail-win-x64.zip -Force
           Move-Item artifacts\CodexQuotaRail-Setup.exe artifacts\CodexQuotaRail-Setup-signed.exe
